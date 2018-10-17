@@ -8,6 +8,7 @@ import "flag"
 import "fmt"
 import "log"
 import "os"
+import "os/exec"
 import "os/signal"
 import "path"
 import "path/filepath"
@@ -38,8 +39,9 @@ const DefaultOutputStdoutFlush = false
 
 const DefaultOutputFileEnabled = false
 const DefaultOutputFileCurrentStorePath = ""
-const DefaultOutputFileArchivedStorePath = ""
 const DefaultOutputFileCurrentSymlinkPath = ""
+const DefaultOutputFileArchivedStorePath = ""
+const DefaultOutputFileArchivedCompress = ""
 const DefaultOutputFileCurrentPrefix = ""
 const DefaultOutputFileArchivedPrefix = ""
 const DefaultOutputFileCurrentSuffix = ".json-stream"
@@ -59,7 +61,7 @@ const DefaultDequeueTickerTimeout = 6 * time.Second
 const DefaultDequeueReportTimeout = 60 * time.Second
 const DefaultDequeueReportCounter = 1000
 const DefaultDequeueDebug = false
-const DefaultDequeueStopTimeout = 6 * time.Second
+const DefaultDequeueStopTimeout = 60 * time.Second
 
 
 
@@ -104,8 +106,10 @@ type OutputConfiguration struct {
 	
 	FileEnabled bool
 	FileCurrentStorePath string
-	FileArchivedStorePath string
 	FileCurrentSymlinkPath string
+	FileArchivedStorePath string
+	FileArchivedCompressCommand []string
+	FileArchivedCompressSuffix string
 	FileCurrentPrefix string
 	FileArchivedPrefix string
 	FileCurrentSuffix string
@@ -163,8 +167,9 @@ func configure (_arguments []string) (*Configuration, error) {
 	
 	_outputFileEnabled := _flags.Bool ("output-file", DefaultOutputFileEnabled, "true (*) | false")
 	_outputFileCurrentStorePath := _flags.String ("output-file-current-store", DefaultOutputFileCurrentStorePath, "<path>")
-	_outputFileArchivedStorePath := _flags.String ("output-file-archived-store", DefaultOutputFileArchivedStorePath, "<path>")
 	_outputFileCurrentSymlinkPath := _flags.String ("output-file-current-symlink", DefaultOutputFileCurrentSymlinkPath, "<path>")
+	_outputFileArchivedStorePath := _flags.String ("output-file-archived-store", DefaultOutputFileArchivedStorePath, "<path>")
+	_outputFileArchivedCompress := _flags.String ("output-file-archived-compress", DefaultOutputFileArchivedCompress, "none | lz4 | lzo | gz | bz2 | xz")
 	_outputFileCurrentPrefix := _flags.String ("output-file-current-prefix", DefaultOutputFileCurrentPrefix, "<prefix>")
 	_outputFileArchivedPrefix := _flags.String ("output-file-archived-prefix", DefaultOutputFileArchivedPrefix, "<prefix>")
 	_outputFileCurrentSuffix := _flags.String ("output-file-current-suffix", DefaultOutputFileCurrentSuffix, "<suffix>")
@@ -193,7 +198,7 @@ func configure (_arguments []string) (*Configuration, error) {
 		case "rfc5424" :
 			_syslogFormatParser = syslog.RFC5424
 		default :
-			return nil, fmt.Errorf ("[a87e7a5f]  invalid `syslog-format` value:  `%s`", _syslogFormatParser)
+			return nil, fmt.Errorf ("[a87e7a5f]  invalid `syslog-format` value:  `%s`", *_syslogFormatName)
 	}
 	
 	
@@ -203,6 +208,9 @@ func configure (_arguments []string) (*Configuration, error) {
 	if *_outputFileArchivedStorePath != "" {
 		*_outputFileEnabled = true
 	}
+	
+	var _outputFileArchivedCompressCommand []string = nil
+	var _outputFileArchivedCompressSuffix string = ""
 	
 	if *_outputFileEnabled {
 		if *_outputFileCurrentStorePath == "" {
@@ -232,6 +240,36 @@ func configure (_arguments []string) (*Configuration, error) {
 		} else {
 			_outputFileArchivedStorePath = _outputFileCurrentStorePath
 		}
+		switch *_outputFileArchivedCompress {
+			case "none" :
+			case "lz4" :
+				_outputFileArchivedCompressCommand = []string {
+						"lz4", "-1",
+					}
+				_outputFileArchivedCompressSuffix = ".lz4"
+			case "lzo" :
+				_outputFileArchivedCompressCommand = []string {
+						"lzop", "-1",
+					}
+				_outputFileArchivedCompressSuffix = ".lzo"
+			case "gz" :
+				_outputFileArchivedCompressCommand = []string {
+						"gzip", "-1",
+					}
+				_outputFileArchivedCompressSuffix = ".gz"
+			case "bz2" :
+				_outputFileArchivedCompressCommand = []string {
+						"bzip2", "-1",
+					}
+				_outputFileArchivedCompressSuffix = ".bz2"
+			case "xz" :
+				_outputFileArchivedCompressCommand = []string {
+						"xz", "-0", "-F", "xz", "-C", "sha256", "-T", "1",
+					}
+				_outputFileArchivedCompressSuffix = ".xz"
+			default :
+				return nil, fmt.Errorf ("[aa5e00d4]  invalid `output-file-archived-compress` value: `%s`", *_outputFileArchivedCompress)
+		}
 	}
 	
 	_syslogConfiguration := SyslogConfiguration {
@@ -256,8 +294,10 @@ func configure (_arguments []string) (*Configuration, error) {
 			
 			FileEnabled : *_outputFileEnabled,
 			FileCurrentStorePath : *_outputFileCurrentStorePath,
-			FileArchivedStorePath : *_outputFileArchivedStorePath,
 			FileCurrentSymlinkPath : *_outputFileCurrentSymlinkPath,
+			FileArchivedStorePath : *_outputFileArchivedStorePath,
+			FileArchivedCompressCommand : _outputFileArchivedCompressCommand,
+			FileArchivedCompressSuffix : _outputFileArchivedCompressSuffix,
 			FileCurrentPrefix : *_outputFileCurrentPrefix,
 			FileArchivedPrefix : *_outputFileArchivedPrefix,
 			FileCurrentSuffix : *_outputFileCurrentSuffix,
@@ -406,7 +446,7 @@ func dequeueLoop (_syslogQueue syslog.LogPartsChannel, _signalsQueue <-chan os.S
 	log.Printf ("[068b224e]  dequeue stopped receiving messages!\n")
 	
 	if _configuration.Output.FileEnabled {
-		if _error := outputFileClose (&_configuration.Output, _context.output); _error != nil {
+		if _error := outputFileClose (&_configuration.Output, _context.output, true); _error != nil {
 			logError (_error, "")
 		}
 	}
@@ -631,6 +671,7 @@ func outputFileOpen (_configuration *OutputConfiguration, _context *OutputContex
 		_context.currentFile = _file
 	} else {
 		log.Printf ("[27432827]  failed opening current output file `%s` (open)!  ignoring!\n", _context.currentFileCurrentPath)
+		logError (_error, "")
 		_context.currentFile = nil
 	}
 	
@@ -678,14 +719,14 @@ func outputFileClosePerhaps (_configuration *OutputConfiguration, _context *Outp
 	}
 	
 	if _shouldClose {
-		return outputFileClose (_configuration, _context)
+		return outputFileClose (_configuration, _context, false)
 	} else {
 		return nil
 	}
 }
 
 
-func outputFileClose (_configuration *OutputConfiguration, _context *OutputContext) (error) {
+func outputFileClose (_configuration *OutputConfiguration, _context *OutputContext, _wait bool) (error) {
 	
 	if _context.currentFile == nil {
 		return nil
@@ -715,11 +756,106 @@ func outputFileClose (_configuration *OutputConfiguration, _context *OutputConte
 		}
 	}
 	
+	if _configuration.FileArchivedCompressSuffix != "" {
+		if _error := outputFileCompress (_configuration, _context, _wait); _error != nil {
+			log.Printf ("[9e80c303]  failed compressing previous output file to `%s` (rename)!  ignoring!\n", _context.currentFileArchivedPath)
+			logError (_error, "")
+		}
+	}
+	
 	_context.currentFile = nil
 	
 	return nil
 }
 
+
+func outputFileCompress (_configuration *OutputConfiguration, _context *OutputContext, _wait bool) (error) {
+	
+	_uncompressedPath := _context.currentFileArchivedPath
+	_compressedPathFinal := _uncompressedPath + _configuration.FileArchivedCompressSuffix
+	_compressedPathTemp := _uncompressedPath + _configuration.FileArchivedCompressSuffix + ".tmp"
+	
+	log.Printf ("[2d5bbfb2]  compressing previous output file to `%s`...\n", _compressedPathFinal)
+	
+	var _uncompressedFile *os.File
+	var _compressedFile *os.File
+	var _process *os.Process
+	
+	_abort := func () (error) {
+		if _uncompressedFile != nil {
+			_uncompressedFile.Close ()
+		}
+		if _compressedFile != nil {
+			_compressedFile.Close ()
+			os.Remove (_compressedPathTemp)
+		}
+		if _process != nil {
+			_process.Kill ()
+			_process.Wait ()
+		}
+		return fmt.Errorf ("[c3a4f5db]  failed compressing file!")
+	}
+	
+	if _file, _error := os.OpenFile (_uncompressedPath, os.O_RDONLY, DefaultOutputFileFileMode); _error == nil {
+		_uncompressedFile = _file
+	} else {
+		logError (_error, "[6a38d1df]  failed opening uncompressed file!")
+		return _abort ()
+	}
+	
+	if _file, _error := os.OpenFile (_compressedPathTemp, os.O_CREATE | os.O_EXCL | os.O_WRONLY | os.O_APPEND, DefaultOutputFileFileMode); _error == nil {
+		_compressedFile = _file
+	} else {
+		logError (_error, "[36b2959a]  failed opening compressed file!")
+		return _abort ()
+	}
+	
+	_command := exec.Command (_configuration.FileArchivedCompressCommand[0], _configuration.FileArchivedCompressCommand[1:] ...)
+	_command.Stdin = _uncompressedFile
+	_command.Stdout = _compressedFile
+	if _error := _command.Start (); _error == nil {
+		_process = _command.Process
+	} else {
+		logError (_error, "[d591be92]  failed executing compress process (exec)!")
+		return _abort ()
+	}
+	
+	_uncompressedFile.Close ()
+	_uncompressedFile = nil
+	_compressedFile.Close ()
+	_compressedFile = nil
+	
+	_finalize := func () (error) {
+		if _state, _error := _process.Wait (); _error == nil {
+			if ! _state.Success () {
+				log.Printf ("[09463fb9]  failed executing compress process (exit):  `%s`!\n", _state.Sys ())
+				_process = nil
+				return _abort ()
+			}
+		} else {
+			logError (_error, "[30dd81af]  failed executing compress process (wait)!")
+			_process = nil
+			return _abort ()
+		}
+		if _error := os.Rename (_compressedPathTemp, _compressedPathFinal); _error != nil {
+			logError (_error, "[dd8ff061]  failed renaming compressed file!")
+			return _abort ()
+		}
+		if _error := os.Remove (_uncompressedPath); _error != nil {
+			logError (_error, "[9391f70d]  failed deleting uncompressed file!")
+			return _abort ()
+		}
+		log.Printf ("[9b4015d2]  succeeded compressing previous output file to `%s`!\n", _compressedPathFinal)
+		return nil
+	}
+	
+	if _wait {
+		return _finalize ()
+	} else {
+		go _finalize ()
+		return nil
+	}
+}
 
 
 func outputStream (_stream *os.File, _message *Message, _pretty bool, _sequence bool, _flush bool) (error) {

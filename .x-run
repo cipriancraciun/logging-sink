@@ -52,6 +52,7 @@
 			--output-file-current-symlink ./.logs/tail \
 			--output-file-current-store ./.logs/current \
 			--output-file-archived-store ./.logs/archived \
+			--output-file-archived-compress xz \
 			--output-file-json-pretty \
 			--output-file-messages 128 \
 			--output-file-timeout 360s \
