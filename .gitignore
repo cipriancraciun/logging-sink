@@ -1,6 +1,7 @@
 
 .*
 !.gitignore
+!.x-run
 
 *~
 *#

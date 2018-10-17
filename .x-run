@@ -1,0 +1,104 @@
+#!/dev/null
+
+
+
+
+<< go / build / main
+	test "${#}" -eq 0
+	exec -- "${X_RUN[@]}" ':: go / tool' build -v -o ./.outputs/main -- ./sources/main.go
+	exit -- 1
+!!
+
+<< go / execute / main
+	"${X_RUN[@]}" ':: go / build / main'
+	exec -- ./.outputs/main "${@}"
+	exit -- 1
+!!
+
+<< go / execute / main / udp + stdout-only
+	test "${#}" -eq 0
+	"${X_RUN[@]}" ':: go / build / main'
+	exec -- ./.outputs/main \
+			--syslog-listen-udp 127.35.195.99:8514 \
+			--output-stdout-json-pretty=false \
+		#
+	exit -- 1
+!!
+
+<< go / execute / main / udp + file-only
+	test "${#}" -eq 0
+	"${X_RUN[@]}" ':: go / build / main'
+	exec -- ./.outputs/main \
+			--syslog-listen-udp 127.35.195.99:8514 \
+			--output-stdout=false \
+			--output-file-current-symlink ./.logs/tail \
+			--output-file-current-store ./.logs/current \
+			--output-file-archived-store ./.logs/archived \
+			--output-file-json-pretty \
+			--output-file-messages 128 \
+			--output-file-timeout 360s \
+		#
+	exit -- 1
+!!
+
+<< go / dependencies / update
+	test "${#}" -eq 0
+	exec -- "${X_RUN[@]}" ':: go / tool' get -v -d -- ./sources/...
+	exit -- 1
+!!
+
+
+
+
+<< go / tool
+	
+	test "${#}" -ge 1
+	
+	test -d ./.outputs
+	_outputs="$( exec -- readlink -e -- ./.outputs )"
+	
+	export -- GOPATH="${_outputs}/go"
+	exec -- go "${@}"
+	
+	exit -- 1
+!!
+
+
+
+
+<< workspace / initialize / outputs
+	
+	test "${#}" -eq 0
+	
+	if test -d ./.outputs ; then
+		exit -- 0
+	fi
+	
+	_outputs_store="${TMPDIR:-/tmp}/go--${UID}--${RANDOM}-${RANDOM}-${RANDOM}-${RANDOM}"
+	
+	mkdir -- "${_outputs_store}"
+	
+	_outputs_store="$( exec -- readlink -e -- "${_outputs_store}" )"
+	
+	ln -s -f -T -- "${_outputs_store}" ./.outputs
+	
+	exit -- 0
+!!
+
+
+<< workspace / initialize / logs
+	
+	test "${#}" -eq 0
+	
+	if test -d ./.logs ; then
+		exit -- 0
+	fi
+	
+	test -d ./.outputs
+	mkdir -- ./.outputs/logs
+	
+	ln -s -f -T -- ./.outputs/logs ./.logs
+	
+	exit -- 0
+!!
+
