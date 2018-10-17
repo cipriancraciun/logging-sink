@@ -46,7 +46,8 @@ const DefaultOutputFileCurrentPrefix = ""
 const DefaultOutputFileArchivedPrefix = ""
 const DefaultOutputFileCurrentSuffix = ".json-stream"
 const DefaultOutputFileArchivedSuffix = ".json-stream"
-const DefaultOutputFileTimestamp = "2006-01-02-15"
+const DefaultOutputFileCurrentTimestamp = "2006-01-02-15"
+const DefaultOutputFileArchivedTimestamp = "2006-01/2006-01-02-15"
 const DefaultOutputFileMessages = 16 * 1024
 const DefaultOutputFileTimeout = 360 * time.Second
 const DefaultOutputFileJsonPretty = true
@@ -114,7 +115,8 @@ type OutputConfiguration struct {
 	FileArchivedPrefix string
 	FileCurrentSuffix string
 	FileArchivedSuffix string
-	FileTimestamp string
+	FileCurrentTimestamp string
+	FileArchivedTimestamp string
 	FileMessages uint
 	FileTimeout time.Duration
 	FileJsonPretty bool
@@ -174,7 +176,8 @@ func configure (_arguments []string) (*Configuration, error) {
 	_outputFileArchivedPrefix := _flags.String ("output-file-archived-prefix", DefaultOutputFileArchivedPrefix, "<prefix>")
 	_outputFileCurrentSuffix := _flags.String ("output-file-current-suffix", DefaultOutputFileCurrentSuffix, "<suffix>")
 	_outputFileArchivedSuffix := _flags.String ("output-file-archived-suffix", DefaultOutputFileArchivedSuffix, "<suffix>")
-	_outputFileTimestamp := _flags.String ("output-file-timestamp", DefaultOutputFileTimestamp, "<format> (see https://golang.org/pkg/time/#Time.Format)")
+	_outputFileCurrentTimestamp := _flags.String ("output-file-current-timestamp", DefaultOutputFileCurrentTimestamp, "<format> (see https://golang.org/pkg/time/#Time.Format)")
+	_outputFileArchivedTimestamp := _flags.String ("output-file-archived-timestamp", DefaultOutputFileArchivedTimestamp, "<format> (see https://golang.org/pkg/time/#Time.Format)")
 	_outputFileMessages := _flags.Uint ("output-file-messages", DefaultOutputFileMessages, "<count>")
 	_outputFileTimeout := _flags.Duration ("output-file-timeout", DefaultOutputFileTimeout, "<duration>")
 	_outputFileJsonPretty := _flags.Bool ("output-file-json-pretty", DefaultOutputFileJsonPretty, "true (*) | false")
@@ -302,7 +305,8 @@ func configure (_arguments []string) (*Configuration, error) {
 			FileArchivedPrefix : *_outputFileArchivedPrefix,
 			FileCurrentSuffix : *_outputFileCurrentSuffix,
 			FileArchivedSuffix : *_outputFileArchivedSuffix,
-			FileTimestamp : *_outputFileTimestamp,
+			FileCurrentTimestamp : *_outputFileCurrentTimestamp,
+			FileArchivedTimestamp : *_outputFileArchivedTimestamp,
 			FileMessages : *_outputFileMessages,
 			FileTimeout : *_outputFileTimeout,
 			FileJsonPretty : *_outputFileJsonPretty,
@@ -613,7 +617,7 @@ func outputStdout (_message *Message, _configuration *OutputConfiguration) (erro
 func outputFile (_message *Message, _configuration *OutputConfiguration, _context *OutputContext) (error) {
 	
 	_timestamp := time.Now ()
-	_timestampToken := _message.Timestamp.Format (_configuration.FileTimestamp)
+	_timestampToken := _timestamp.Format (_configuration.FileCurrentTimestamp)
 	
 	if _error := outputFileClosePerhaps (_configuration, _context, _timestamp, _timestampToken); _error != nil {
 		logError (_error, "")
@@ -656,7 +660,7 @@ func outputFileOpen (_configuration *OutputConfiguration, _context *OutputContex
 			_configuration.FileArchivedStorePath,
 			os.PathSeparator,
 			_configuration.FileArchivedPrefix,
-			_timestampToken,
+			_timestamp.Format (_configuration.FileArchivedTimestamp),
 			os.Getpid () & 0xffffff,
 			_timestamp.Unix () & 0xffffff,
 			_configuration.FileArchivedSuffix,
