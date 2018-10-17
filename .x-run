@@ -3,21 +3,39 @@
 
 
 
-<< go / build / main
+<< go / build / main / debug
 	test "${#}" -eq 0
-	exec -- "${X_RUN[@]}" ':: go / tool' build -v -o ./.outputs/main -- ./sources/main.go
+	exec -- "${X_RUN[@]}" ':: go / tool' build \
+			-v \
+			-o ./.outputs/main \
+			-- ./sources/main.go \
+		#
 	exit -- 1
 !!
 
+<< go / build / main / release
+	test "${#}" -eq 0
+	exec -- "${X_RUN[@]}" ':: go / tool' build \
+			-v \
+			-ldflags '-s' \
+			-o ./.outputs/main \
+			-- ./sources/main.go \
+		#
+	exit -- 1
+!!
+
+
+
+
 << go / execute / main
-	"${X_RUN[@]}" ':: go / build / main'
+	"${X_RUN[@]}" ':: go / build / main / debug'
 	exec -- ./.outputs/main "${@}"
 	exit -- 1
 !!
 
 << go / execute / main / udp + stdout-only
 	test "${#}" -eq 0
-	"${X_RUN[@]}" ':: go / build / main'
+	"${X_RUN[@]}" ':: go / build / main / debug'
 	exec -- ./.outputs/main \
 			--syslog-listen-udp 127.35.195.99:8514 \
 			--output-stdout-json-pretty=false \
@@ -27,7 +45,7 @@
 
 << go / execute / main / udp + file-only
 	test "${#}" -eq 0
-	"${X_RUN[@]}" ':: go / build / main'
+	"${X_RUN[@]}" ':: go / build / main / debug'
 	exec -- ./.outputs/main \
 			--syslog-listen-udp 127.35.195.99:8514 \
 			--output-stdout=false \
@@ -40,6 +58,9 @@
 		#
 	exit -- 1
 !!
+
+
+
 
 << go / dependencies / update
 	test "${#}" -eq 0

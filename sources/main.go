@@ -37,12 +37,12 @@ const DefaultOutputStdoutJsonSequence = false
 const DefaultOutputStdoutFlush = false
 
 const DefaultOutputFileEnabled = false
-const DefaultOutputFileCurrentStorePath = "./logs"
+const DefaultOutputFileCurrentStorePath = ""
 const DefaultOutputFileArchivedStorePath = ""
 const DefaultOutputFileCurrentSymlinkPath = ""
 const DefaultOutputFileCurrentPrefix = ""
 const DefaultOutputFileArchivedPrefix = ""
-const DefaultOutputFileCurrentSuffix = ".json-stream.current"
+const DefaultOutputFileCurrentSuffix = ".json-stream"
 const DefaultOutputFileArchivedSuffix = ".json-stream"
 const DefaultOutputFileTimestamp = "2006-01-02-15"
 const DefaultOutputFileMessages = 16 * 1024
