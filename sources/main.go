@@ -405,7 +405,7 @@ func dequeueLoop (_syslogQueue syslog.LogPartsChannel, _signalsQueue <-chan os.S
 			
 			case <- _ticker.C :
 				if _debug {
-					log.Printf ("[55e14446]  dequeue timedout waiting to receive message #%d!  retrying!\n", _sequence + 1)
+					log.Printf ("[55e14446]  dequeue timedout waiting to receive message #%d;  retrying!\n", _sequence + 1)
 				}
 		}
 		
@@ -443,7 +443,7 @@ func dequeueLoop (_syslogQueue syslog.LogPartsChannel, _signalsQueue <-chan os.S
 		}
 	}
 	
-	log.Printf ("[068b224e]  dequeue stopped receiving messages!\n")
+	log.Printf ("[068b224e]  dequeue stopped receiving messages;\n")
 	
 	if _configuration.Output.FileEnabled {
 		if _error := outputFileClose (&_configuration.Output, _context.output, true); _error != nil {
@@ -451,7 +451,7 @@ func dequeueLoop (_syslogQueue syslog.LogPartsChannel, _signalsQueue <-chan os.S
 		}
 	}
 	
-	log.Printf ("[91e9d5fb]  dequeue terminated!\n")
+	log.Printf ("[91e9d5fb]  dequeue terminated;\n")
 	os.Exit (0)
 }
 
@@ -701,19 +701,19 @@ func outputFileClosePerhaps (_configuration *OutputConfiguration, _context *Outp
 	_shouldClose := false
 	if ! _shouldClose && (_context.currentFileMessages >= _configuration.FileMessages) {
 		if _debug {
-			log.Printf ("[6608f486]  current file has reached its maximum messages count limit!\n")
+			log.Printf ("[6608f486]  current file has reached its maximum messages count limit;\n")
 		}
 		_shouldClose = true
 	}
 	if ! _shouldClose && (_timestamp.Sub (_context.currentFileTimestamp) >= _configuration.FileTimeout) {
 		if _debug {
-			log.Printf ("[963bf22e]  current file has reached its maximum age limit!\n")
+			log.Printf ("[963bf22e]  current file has reached its maximum age limit;\n")
 		}
 		_shouldClose = true
 	}
 	if ! _shouldClose && (_context.currentFileTimestampToken != _timestampToken) && (_timestampToken != "") {
 		if _debug {
-			log.Printf ("[214f5ea7]  current file has a different timestamp token!\n")
+			log.Printf ("[214f5ea7]  current file has a different timestamp token;\n")
 		}
 		_shouldClose = true
 	}
@@ -845,7 +845,7 @@ func outputFileCompress (_configuration *OutputConfiguration, _context *OutputCo
 			logError (_error, "[9391f70d]  failed deleting uncompressed file!")
 			return _abort ()
 		}
-		log.Printf ("[9b4015d2]  succeeded compressing previous output file to `%s`!\n", _compressedPathFinal)
+		log.Printf ("[9b4015d2]  succeeded compressing previous output file to `%s`;\n", _compressedPathFinal)
 		return nil
 	}
 	
@@ -941,7 +941,7 @@ func main_0 () (error) {
 	}
 	
 	_syslogServer.Wait ()
-	log.Printf ("[885de1c0]  syslog stopped!\n")
+	log.Printf ("[885de1c0]  syslog stopped;\n")
 	
 	for {
 		log.Printf ("[cd90630d]  terminating...\n")
