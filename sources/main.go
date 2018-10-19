@@ -50,6 +50,7 @@ const DefaultOutputFileCurrentStorePath = ""
 const DefaultOutputFileCurrentSymlinkPath = ""
 const DefaultOutputFileArchivedStorePath = ""
 const DefaultOutputFileArchivedCompress = ""
+const DefaultOutputFileArchivedCompressLevel = 9
 const DefaultOutputFileCurrentPrefix = ""
 const DefaultOutputFileArchivedPrefix = ""
 const DefaultOutputFileCurrentSuffix = ".json-stream"
@@ -294,6 +295,7 @@ func configure (_arguments []string) (*Configuration, error) {
 	_outputFileCurrentSymlinkPath := _flags.String ("output-file-current-symlink", DefaultOutputFileCurrentSymlinkPath, "<path>")
 	_outputFileArchivedStorePath := _flags.String ("output-file-archived-store", DefaultOutputFileArchivedStorePath, "<path>")
 	_outputFileArchivedCompress := _flags.String ("output-file-archived-compress", DefaultOutputFileArchivedCompress, "none | lz4 | lzo | gz | bz2 | xz")
+	_outputFileArchivedCompressLevel := _flags.Uint ("output-file-archived-compress-level", DefaultOutputFileArchivedCompressLevel, "<level> (see manual for each compressor)")
 	_outputFileCurrentPrefix := _flags.String ("output-file-current-prefix", DefaultOutputFileCurrentPrefix, "<prefix>")
 	_outputFileArchivedPrefix := _flags.String ("output-file-archived-prefix", DefaultOutputFileArchivedPrefix, "<prefix>")
 	_outputFileCurrentSuffix := _flags.String ("output-file-current-suffix", DefaultOutputFileCurrentSuffix, "<suffix>")
@@ -408,31 +410,32 @@ func configure (_arguments []string) (*Configuration, error) {
 		} else {
 			_outputFileArchivedStorePath = _outputFileCurrentStorePath
 		}
+		_level := fmt.Sprintf ("-%d", *_outputFileArchivedCompressLevel)
 		switch *_outputFileArchivedCompress {
 			case "none" :
 			case "lz4" :
 				_outputFileArchivedCompressCommand = []string {
-						"lz4", "-1",
+						"lz4", _level,
 					}
 				_outputFileArchivedCompressSuffix = ".lz4"
 			case "lzo" :
 				_outputFileArchivedCompressCommand = []string {
-						"lzop", "-1",
+						"lzop", _level,
 					}
 				_outputFileArchivedCompressSuffix = ".lzo"
 			case "gz" :
 				_outputFileArchivedCompressCommand = []string {
-						"gzip", "-1",
+						"gzip", _level,
 					}
 				_outputFileArchivedCompressSuffix = ".gz"
 			case "bz2" :
 				_outputFileArchivedCompressCommand = []string {
-						"bzip2", "-1",
+						"bzip2", _level,
 					}
 				_outputFileArchivedCompressSuffix = ".bz2"
 			case "xz" :
 				_outputFileArchivedCompressCommand = []string {
-						"xz", "-1", "-F", "xz", "-C", "sha256", "-T", "1",
+						"xz", _level, "-F", "xz", "-C", "sha256", "-T", "1",
 					}
 				_outputFileArchivedCompressSuffix = ".xz"
 			default :
