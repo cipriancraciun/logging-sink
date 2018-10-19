@@ -3,6 +3,7 @@
 package main
 
 
+import "crypto/rand"
 import "encoding/json"
 import "flag"
 import "fmt"
@@ -26,18 +27,19 @@ import syslog_format "gopkg.in/mcuadros/go-syslog.v2/format"
 
 const DefaultInputSyslogEnabled = false
 const DefaultInputSyslogListenTcp = ""
-const DefaultInputSyslogTimeoutTcp = 360 * 1000
+const DefaultInputSyslogTimeoutTcp = 360
 const DefaultInputSyslogListenUdp = ""
 const DefaultInputSyslogListenUnix = ""
-const DefaultInputSyslogFormat = "rfc5424"
-const DefaultInputSyslogQueueSize = 1024
+const DefaultInputSyslogFormat = "rfc3164"
+const DefaultInputSyslogQueueSize = 16 * 1024
 const DefaultInputSyslogDebug = false
 
 const DefaultOutputStdoutEnabled = true
 const DefaultOutputStdoutJsonPretty = true
 const DefaultOutputStdoutJsonSequence = false
 const DefaultOutputStdoutFlush = false
-const DefaultOutputStdoutQueueSize = 1024
+const DefaultOutputStdoutQueueSize = 16 * 1024
+const DefaultOutputStdoutDebug = false
 
 const DefaultOutputFileEnabled = false
 const DefaultOutputFileCurrentStorePath = ""
@@ -49,21 +51,22 @@ const DefaultOutputFileArchivedPrefix = ""
 const DefaultOutputFileCurrentSuffix = ".json-stream"
 const DefaultOutputFileArchivedSuffix = ".json-stream"
 const DefaultOutputFileCurrentTimestamp = "2006-01-02-15"
-const DefaultOutputFileArchivedTimestamp = "2006-01/2006-01-02-15"
+const DefaultOutputFileArchivedTimestamp = "2006-01/2006-01-02-15-04-05"
 const DefaultOutputFileMessages = 16 * 1024
-const DefaultOutputFileTimeout = 360 * time.Second
-const DefaultOutputFileJsonPretty = true
+const DefaultOutputFileTimeout = 1 * time.Hour
+const DefaultOutputFileJsonPretty = false
 const DefaultOutputFileJsonSequence = true
 const DefaultOutputFileFlush = true
 const DefaultOutputFileStoreMode = 0750
 const DefaultOutputFileFileMode = 0640
 const DefaultOutputFileTickerInterval = 6 * time.Second
-const DefaultOutputFileQueueSize = 1024
+const DefaultOutputFileQueueSize = 16 * 1024
 const DefaultOutputFileDebug = false
 
 const DefaultOutputBufferSize = 16 * 1024
 
 const DefaultParserMessageJson = true
+const DefaultParserDebug = false
 
 const DefaultDequeueTickerInterval = 6 * time.Second
 const DefaultDequeueReportInterval = 60 * time.Second
@@ -71,6 +74,7 @@ const DefaultDequeueReportCounter = 1000
 const DefaultDequeueDebug = false
 
 const DefaultSignalsQueueSize = 16
+const DefaultGlobalDebug = false
 
 
 
@@ -100,6 +104,7 @@ type InputSyslogConfiguration struct {
 	FormatName string
 	FormatParser syslog_format.Format
 	QueueSize uint
+	Debug bool
 }
 
 type InputSyslogContext struct {
@@ -123,6 +128,7 @@ type OutputStdoutConfiguration struct {
 	JsonSequence bool
 	Flush bool
 	QueueSize uint
+	Debug bool
 }
 
 type OutputStdoutContext struct {
@@ -160,9 +166,9 @@ type OutputFileConfiguration struct {
 	Flush bool
 	StoreMode os.FileMode
 	FileMode os.FileMode
-	Debug bool
 	TickerInterval time.Duration
 	QueueSize uint
+	Debug bool
 }
 
 type OutputFileContext struct {
@@ -216,6 +222,7 @@ type DequeueContext struct {
 type ParserConfiguration struct {
 	
 	MessageJson bool
+	Debug bool
 }
 
 type ParserContext struct {
@@ -234,6 +241,8 @@ type Configuration struct {
 	OutputFile *OutputFileConfiguration
 	Dequeue *DequeueConfiguration
 	Parser *ParserConfiguration
+	
+	Debug bool
 }
 
 
@@ -249,12 +258,14 @@ func configure (_arguments []string) (*Configuration, error) {
 	_inputSyslogListenUnix := _flags.String ("input-syslog-listen-unix", DefaultInputSyslogListenUnix, "<path>")
 	_inputSyslogFormatName := _flags.String ("input-syslog-format", DefaultInputSyslogFormat, "rfc3164 | rfc5424")
 	_inputSyslogQueueSize := _flags.Uint ("input-syslog-queue", DefaultInputSyslogQueueSize, "<size>")
+	_inputSyslogDebug := _flags.Bool ("input-syslog-debug", DefaultInputSyslogDebug, "true | false (*)")
 	
 	_outputStdoutEnabled := _flags.Bool ("output-stdout", DefaultOutputStdoutEnabled, "true (*) | false")
 	_outputStdoutJsonPretty := _flags.Bool ("output-stdout-json-pretty", DefaultOutputStdoutJsonPretty, "true (*) | false")
 	_outputStdoutJsonSequence := _flags.Bool ("output-stdout-json-sequence", DefaultOutputStdoutJsonSequence, "true | false (*)")
 	_outputStdoutFlush := _flags.Bool ("output-stdout-flush", DefaultOutputStdoutFlush, "true (*) | false")
 	_outputStdoutQueueSize := _flags.Uint ("output-stdout-queue", DefaultOutputStdoutQueueSize, "<size>")
+	_outputStdoutDebug := _flags.Bool ("output-stdout-debug", DefaultOutputStdoutDebug, "true | false (*)")
 	
 	_outputFileEnabled := _flags.Bool ("output-file", DefaultOutputFileEnabled, "true (*) | false")
 	_outputFileCurrentStorePath := _flags.String ("output-file-current-store", DefaultOutputFileCurrentStorePath, "<path>")
@@ -273,8 +284,17 @@ func configure (_arguments []string) (*Configuration, error) {
 	_outputFileJsonSequence := _flags.Bool ("output-file-json-sequence", DefaultOutputFileJsonSequence, "true (*) | false")
 	_outputFileFlush := _flags.Bool ("output-file-flush", DefaultOutputFileFlush, "true (*) | false")
 	_outputFileQueueSize := _flags.Uint ("output-file-queue", DefaultOutputFileQueueSize, "<size>")
+	_outputFileDebug := _flags.Bool ("output-file-debug", DefaultOutputFileDebug, "true | false (*)")
 	
-	_parseMessageJson := _flags.Bool ("parse-message-json", DefaultParserMessageJson, "true (*) | false")
+	_dequeueReportInterval := _flags.Duration ("report-timeout", DefaultDequeueReportInterval, "<duration>")
+	_dequeueReportCounter := _flags.Uint ("report-messages", DefaultDequeueReportCounter, "<count>")
+	
+	_parserMessageJson := _flags.Bool ("parser-message-json", DefaultParserMessageJson, "true (*) | false")
+	_parserDebug := _flags.Bool ("parser-debug", DefaultParserDebug, "true | false (*)")
+	
+	_forcedDebug := _flags.Bool ("debug", false, "true | false (*)")
+	
+	_globalDebug := DefaultGlobalDebug || *_forcedDebug
 	
 	
 	if error := _flags.Parse (_arguments); error != nil {
@@ -298,7 +318,7 @@ func configure (_arguments []string) (*Configuration, error) {
 			case "rfc5424" :
 				_inputSyslogFormatParser = syslog.RFC5424
 			default :
-				return nil, fmt.Errorf ("[a87e7a5f]  invalid `syslog-format` value:  `%s`!", *_inputSyslogFormatName)
+				return nil, fmt.Errorf ("[a87e7a5f]  invalid `input-syslog-format` value:  `%s`!", *_inputSyslogFormatName)
 		}
 		_inputSyslogConfiguration = & InputSyslogConfiguration {
 				ListenTcp : *_inputSyslogListenTcp,
@@ -308,7 +328,9 @@ func configure (_arguments []string) (*Configuration, error) {
 				FormatName : *_inputSyslogFormatName,
 				FormatParser : _inputSyslogFormatParser,
 				QueueSize : *_inputSyslogQueueSize,
+				Debug : *_inputSyslogDebug || *_forcedDebug,
 			}
+		_globalDebug = _globalDebug || _inputSyslogConfiguration.Debug
 	}
 	
 	
@@ -319,7 +341,9 @@ func configure (_arguments []string) (*Configuration, error) {
 				JsonSequence : *_outputStdoutJsonSequence,
 				Flush : *_outputStdoutFlush,
 				QueueSize : *_outputStdoutQueueSize,
+				Debug : *_outputStdoutDebug || *_forcedDebug,
 			}
+		_globalDebug = _globalDebug || _outputStdoutConfiguration.Debug
 	}
 	
 	
@@ -408,21 +432,26 @@ func configure (_arguments []string) (*Configuration, error) {
 				FileMode : DefaultOutputFileFileMode,
 				TickerInterval : DefaultOutputFileTickerInterval,
 				QueueSize : *_outputFileQueueSize,
-				Debug : DefaultOutputFileDebug,
+				Debug : *_outputFileDebug || *_forcedDebug,
 			}
+		_globalDebug = _globalDebug || _outputFileConfiguration.Debug
 	}
 	
 	
 	_dequeueConfiguration := & DequeueConfiguration {
 			TickerInterval : DefaultDequeueTickerInterval,
-			ReportInterval : DefaultDequeueReportInterval,
-			ReportCounter : DefaultDequeueReportCounter,
-			Debug : DefaultDequeueDebug,
+			ReportInterval : *_dequeueReportInterval,
+			ReportCounter : *_dequeueReportCounter,
+			Debug : DefaultDequeueDebug || *_forcedDebug,
 		}
+	_globalDebug = _globalDebug || _dequeueConfiguration.Debug
+	
 	
 	_parserConfiguration := & ParserConfiguration {
-			MessageJson : *_parseMessageJson,
+			MessageJson : *_parserMessageJson,
+			Debug : *_parserDebug || *_forcedDebug,
 		}
+	_globalDebug = _globalDebug || _parserConfiguration.Debug
 	
 	
 	_configuration := & Configuration {
@@ -431,6 +460,7 @@ func configure (_arguments []string) (*Configuration, error) {
 			OutputFile : _outputFileConfiguration,
 			Dequeue : _dequeueConfiguration,
 			Parser : _parserConfiguration,
+			Debug : _globalDebug,
 		}
 	
 	return _configuration, nil
@@ -444,12 +474,18 @@ func inputSyslogInitialize (_configuration *InputSyslogConfiguration, _syslogQue
 	_server := syslog.NewServer ()
 	
 	_server.SetHandler (InputSyslogHandler (_syslogQueue))
+	_server.SetTimeout (int64 (_configuration.TimeoutTcp) * 1000)
+	
+	if _configuration.Debug {
+		log.Printf ("[ii] [fe61c4fc]  input syslog using protocol `%s`;\n", _configuration.FormatName)
+	}
 	_server.SetFormat (_configuration.FormatParser)
-	_server.SetTimeout (int64 (_configuration.TimeoutTcp))
 	
 	_listening := false
 	if _configuration.ListenTcp != "" {
-		log.Printf ("[42aa16d0]  input syslog listening TCP on `%s`...\n", _configuration.ListenTcp)
+		if _configuration.Debug {
+			log.Printf ("[ii] [42aa16d0]  input syslog listening on TCP at `%s`...\n", _configuration.ListenTcp)
+		}
 		if _error := _server.ListenTCP (_configuration.ListenTcp); _error != nil {
 			_server.Kill ()
 			return nil, _error
@@ -457,7 +493,9 @@ func inputSyslogInitialize (_configuration *InputSyslogConfiguration, _syslogQue
 		_listening = true
 	}
 	if _configuration.ListenUdp != "" {
-		log.Printf ("[42aa16d0]  input syslog listening UDP on `%s`...\n", _configuration.ListenUdp)
+		if _configuration.Debug {
+			log.Printf ("[ii] [bb824266]  input syslog listening on UDP at `%s`...\n", _configuration.ListenUdp)
+		}
 		if _error := _server.ListenUDP (_configuration.ListenUdp); _error != nil {
 			_server.Kill ()
 			return nil, _error
@@ -465,7 +503,9 @@ func inputSyslogInitialize (_configuration *InputSyslogConfiguration, _syslogQue
 		_listening = true
 	}
 	if _configuration.ListenUnix != "" {
-		log.Printf ("[42aa16d0]  input syslog listening Unix on `%s`...\n", _configuration.ListenUnix)
+		if _configuration.Debug {
+			log.Printf ("[ii] [eba876e1]  input syslog listening on Unix at `%s`...\n", _configuration.ListenUnix)
+		}
 		if _error := _server.ListenUnixgram (_configuration.ListenUnix); _error != nil {
 			_server.Kill ()
 			return nil, _error
@@ -478,7 +518,9 @@ func inputSyslogInitialize (_configuration *InputSyslogConfiguration, _syslogQue
 		return nil, fmt.Errorf ("[e5523f7a]  input syslog has no listeners configured!")
 	}
 	
-	log.Printf ("[f143c879]  input syslog starting...\n")
+	if _configuration.Debug {
+		log.Printf ("[ii] [f143c879]  input syslog starting...\n")
+	}
 	
 	if _error := _server.Boot (); _error != nil {
 		return nil, _error
@@ -532,7 +574,11 @@ func inputSyslogLooper (_context *InputSyslogContext) (error) {
 		return nil
 	}
 	
-	log.Printf ("[58bc4187]  input syslog started;\n")
+	_configuration := _context.configuration
+	
+	if _configuration.Debug {
+		log.Printf ("[ii] [58bc4187]  input syslog started;\n")
+	}
 	
 	_stop : for {
 		select {
@@ -541,24 +587,28 @@ func inputSyslogLooper (_context *InputSyslogContext) (error) {
 				switch _signal {
 					
 					case syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT :
-						log.Printf ("[56ebeed8]  input syslog interrupted by signal:  `%s`!  terminating!\n", _signal)
+						if _configuration.Debug {
+							log.Printf ("[ww] [56ebeed8]  input syslog interrupted by signal:  `%s`;  terminating!\n", _signal)
+						}
 						break _stop
 					
 					case syscall.SIGHUP :
 					
 					default :
-						log.Printf ("[56ebeed8]  input syslog interrupted by unexpected signal:  `%s`!  ignoring!\n", _signal)
+						log.Printf ("[ee] [b0635598]  input syslog interrupted by unexpected signal:  `%s`;  ignoring!\n", _signal)
 				}
 		}
 	}
 	
-	log.Printf ("[22397366]  input syslog finalizing...\n")
+	if _configuration.Debug {
+		log.Printf ("[ii] [22397366]  input syslog finalizing...\n")
+	}
 	if _error := inputSyslogFinalize (_context); _error != nil {
-		logError (_error, "[0d40d40b]  input syslog failed to finalize!  ignoring!")
+		logError (_error, "[0d40d40b]  input syslog failed to finalize;  ignoring!")
 		return _error
 	}
 	
-	log.Printf ("[50f377f5]  input syslog terminated;\n")
+	log.Printf ("[ii] [50f377f5]  input syslog terminated;\n")
 	return nil
 }
 
@@ -588,7 +638,9 @@ func dequeueInitialize (_configuration *DequeueConfiguration, _parser *ParserCon
 			exitGroup : _exitGroup,
 		}
 	
-	log.Printf ("[e686224a]  dequeue starting...\n")
+	if _configuration.Debug {
+		log.Printf ("[ii] [e686224a]  dequeue starting...\n")
+	}
 	
 	_exitGroup.Add (1)
 	
@@ -629,14 +681,17 @@ func dequeueLooper (_context *DequeueContext) (error) {
 	_configuration := _context.configuration
 	_ticker := time.NewTicker (_configuration.TickerInterval)
 	
-	_lastReport := time.Now ()
+	_lastReportTimestamp := time.Now ()
+	_lastReportSequence := uint64 (0)
 	
-	log.Printf ("[425c288e]  dequeue started receiving messages...\n")
+	if _configuration.Debug {
+		log.Printf ("[ii] [425c288e]  dequeue started receiving messages...\n")
+	}
 	
 	for {
 		
 		if _configuration.Debug {
-			log.Printf ("[5cedbf0d]  dequeue waiting to receive message #%d...\n", _context.sequence + 1)
+			log.Printf ("[ii] [5cedbf0d]  dequeue waiting to receive message #%d...\n", _context.sequence + 1)
 		}
 		
 		var _message syslog_format.LogParts = nil
@@ -652,13 +707,25 @@ func dequeueLooper (_context *DequeueContext) (error) {
 				}
 			
 			case _signal := <- _context.signalsQueue :
-				log.Printf ("[61daa6e2]  dequeue interrupted by signal:  `%s`!\n", _signal)
-				_shouldStop = true
-				_shouldReport = true
+				switch _signal {
+					
+					case syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT :
+						if _configuration.Debug {
+							log.Printf ("[ww] [61daa6e2]  dequeue interrupted by signal:  `%s`;  terminating!\n", _signal)
+						}
+						_shouldStop = true
+						_shouldReport = true
+					
+					case syscall.SIGHUP :
+						_shouldReport = true
+					
+					default :
+						log.Printf ("[ee] [e883f5fd]  dequeue interrupted by unexpected signal:  `%s`;  ignoring!\n", _signal)
+				}
 			
 			case <- _ticker.C :
 				if _configuration.Debug {
-					log.Printf ("[55e14446]  dequeue timedout waiting to receive message #%d;  retrying!\n", _context.sequence + 1)
+					log.Printf ("[ii] [55e14446]  dequeue timedout waiting to receive message #%d;  retrying!\n", _context.sequence + 1)
 				}
 		}
 		
@@ -667,22 +734,30 @@ func dequeueLooper (_context *DequeueContext) (error) {
 		if _message != nil {
 			_context.sequence += 1
 			if _error := dequeueProcess (_context, _message); _error != nil {
-				logError (_error, fmt.Sprintf ("[46d8f692]  unexpected error encountered while processing the message #%d!  ignoring!", _context.sequence))
+				logError (_error, fmt.Sprintf ("[46d8f692]  unexpected error encountered while processing the message #%d;  ignoring!", _context.sequence))
 			} else if _configuration.Debug {
-				log.Printf ("[4e4ef11d]  dequeue succeeded processing the message #%d;\n", _context.sequence)
+				log.Printf ("[ii] [4e4ef11d]  dequeue succeeded processing the message #%d;\n", _context.sequence)
 			}
 			if (_context.sequence % uint64 (_configuration.ReportCounter)) == 0 {
 				_shouldReport = true
 			}
 		}
 		
-		if _timestamp.Sub (_lastReport) >= _configuration.ReportInterval {
+		if _timestamp.Sub (_lastReportTimestamp) >= _configuration.ReportInterval {
 			_shouldReport = true
 		}
 		
 		if _shouldReport {
-			log.Printf ("[5cf68979]  dequeue processed %d K messages (%d);\n", _context.sequence / 1000, _context.sequence)
-			_lastReport = _timestamp
+			_deltaTimestamp := _timestamp.Sub (_lastReportTimestamp) .Seconds () + 0.0000000001
+			_deltaSequence := _context.sequence - _lastReportSequence
+			_deltaSpeed := float64 (_deltaSequence) / _deltaTimestamp
+			if _deltaSequence > 0 {
+				log.Printf ("[ii] [5cf68979]  processed %d K messages (currently %d at %.2f m/s, in total %d);\n", _context.sequence / 1000, _deltaSequence, _deltaSpeed, _context.sequence)
+			} else {
+				log.Printf ("[ii] [9eea1474]  processed %d K messages (in total %d);\n", _context.sequence / 1000, _context.sequence)
+			}
+			_lastReportTimestamp = _timestamp
+			_lastReportSequence = _context.sequence
 		}
 		
 		if _shouldStop {
@@ -690,15 +765,19 @@ func dequeueLooper (_context *DequeueContext) (error) {
 		}
 	}
 	
-	log.Printf ("[068b224e]  dequeue stopped receiving messages;\n")
+	if _configuration.Debug {
+		log.Printf ("[ii] [068b224e]  dequeue stopped receiving messages;\n")
+	}
 	
-	log.Printf ("[d39d8157]  dequeue finalizing...\n")
+	if _configuration.Debug {
+		log.Printf ("[ii] [d39d8157]  dequeue finalizing...\n")
+	}
 	if _error := dequeueFinalize (_context); _error != nil {
-		logError (_error, "[b31a98f6]  dequeue failed to finalize!  ignoring!\n")
+		logError (_error, "[b31a98f6]  dequeue failed to finalize;  ignoring!\n")
 		return _error
 	}
 	
-	log.Printf ("[c3dabaf5]  dequeue terminated;\n")
+	log.Printf ("[ii] [c3dabaf5]  dequeue terminated;\n")
 	return nil
 }
 
@@ -769,12 +848,12 @@ func parserProcess (_context *ParserContext, _syslogMessage syslog_format.LogPar
 		if _messageText_0, _messageIsString := _messageText_0.(string); _messageIsString {
 			_messageText = _messageText_0
 		} else {
-			log.Printf ("[87d571ff]  syslog message #%d is missing `message` (attribute is not a string)!  ignoring!\n", _sequence)
+			log.Printf ("[ee] [87d571ff]  syslog message #%d is missing `message` (attribute is not a string);  ignoring!\n", _sequence)
 			_messageText = ""
 		}
 		delete (_syslogMessage, "message")
 	} else {
-		log.Printf ("[6e096811]  syslog message #%d is missing `message` (attribute does not exist)!  ignoring!\n", _sequence)
+		log.Printf ("[ee] [6e096811]  syslog message #%d is missing `message` (attribute does not exist);  ignoring!\n", _sequence)
 		_messageText = ""
 	}
 	
@@ -783,12 +862,12 @@ func parserProcess (_context *ParserContext, _syslogMessage syslog_format.LogPar
 		if _application_0, _applicationIsString := _application_0.(string); _applicationIsString {
 			_application = _application_0
 		} else {
-			log.Printf ("[7cf38fac]  syslog message #%d is missing `app_name` (attribute is not a string)!  ignoring!\n", _sequence)
+			log.Printf ("[ee] [7cf38fac]  syslog message #%d is missing `app_name` (attribute is not a string);  ignoring!\n", _sequence)
 			_application = "<unknown>"
 		}
 		delete (_syslogMessage, "app_name")
 	} else {
-		log.Printf ("[d67aba45]  syslog message #%d is missing `app_name` (attribute does not exist)!  ignoring!\n", _sequence)
+		log.Printf ("[ee] [d67aba45]  syslog message #%d is missing `app_name` (attribute does not exist);  ignoring!\n", _sequence)
 		_application = "<unknown>"
 	}
 	
@@ -821,12 +900,12 @@ func parserProcess (_context *ParserContext, _syslogMessage syslog_format.LogPar
 				_level = 7
 				_levelText = "debug"
 			default :
-				log.Printf ("[a11d7539]  syslog message #%d has an invalid severity `%d`!  ignoring!\n", _sequence, _severity_0)
+				log.Printf ("[ee] [a11d7539]  syslog message #%d has an invalid severity `%d`;  ignoring!\n", _sequence, _severity_0)
 				_level = -1
 				_levelText = "<undefined>"
 		}
 	} else {
-		log.Printf ("[aa9b6e25]  syslog message #%d is missing `severity` (attribute does not exist)!  ignoring!\n", _sequence)
+		log.Printf ("[ee] [aa9b6e25]  syslog message #%d is missing `severity` (attribute does not exist);  ignoring!\n", _sequence)
 		_level = -1
 		_levelText = "<unknown>"
 	}
@@ -871,7 +950,9 @@ func outputStdoutInitialize (_configuration *OutputStdoutConfiguration, _message
 			exitGroup : _exitGroup,
 		}
 	
-	log.Printf ("[f168ffc9]  output stdout starting...\n")
+	if _configuration.Debug {
+		log.Printf ("[ii] [f168ffc9]  output stdout starting...\n")
+	}
 	
 	_exitGroup.Add (1)
 	
@@ -912,38 +993,46 @@ func outputStdoutLooper (_context *OutputStdoutContext) (error) {
 		return nil
 	}
 	
-	log.Printf ("[345aa7cc]  output stdout started;\n")
+	_configuration := _context.configuration
+	
+	if _configuration.Debug {
+		log.Printf ("[ii] [345aa7cc]  output stdout started;\n")
+	}
 	
 	_stop : for {
 		select {
 			
 			case _message := <- _context.messagesQueue :
 				if _error := outputStdoutProcess (_context, _message); _error != nil {
-					logError (_error, "[0c142768]  output stdout failed processing message!  ignoring!")
+					logError (_error, "[0c142768]  output stdout failed processing message;  ignoring!")
 				}
 			
 			case _signal := <- _context.signalsQueue :
 				switch _signal {
 					
 					case syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT :
-						log.Printf ("[bb274e9a]  output stdout interrupted by signal:  `%s`!  terminating!\n", _signal)
+						if _configuration.Debug {
+							log.Printf ("[ww] [bb274e9a]  output stdout interrupted by signal:  `%s`!  terminating!\n", _signal)
+						}
 						break _stop
 					
 					case syscall.SIGHUP :
 					
 					default :
-						log.Printf ("[68802f72]  output stdout interrupted by unexpected signal:  `%s`!  ignoring!\n", _signal)
+						log.Printf ("[ee] [68802f72]  output stdout interrupted by unexpected signal:  `%s`;  ignoring!\n", _signal)
 				}
 		}
 	}
 	
-	log.Printf ("[84cc1079]  output stdout finalizing...\n")
+	if _configuration.Debug {
+		log.Printf ("[ii] [84cc1079]  output stdout finalizing...\n")
+	}
 	if _error := outputStdoutFinalize (_context); _error != nil {
-		logError (_error, "[021ed52c]  output stdout failed to finalize!  ignoring!")
+		logError (_error, "[021ed52c]  output stdout failed to finalize;  ignoring!")
 		return _error
 	}
 	
-	log.Printf ("[7d12bc82]  output stdout terminated;\n")
+	log.Printf ("[ii] [7d12bc82]  output stdout terminated;\n")
 	return nil
 }
 
@@ -972,7 +1061,9 @@ func outputFileInitialize (_configuration *OutputFileConfiguration, _messagesQue
 			exitGroup : _exitGroup,
 		}
 	
-	log.Printf ("[83c65034]  output file starting...\n")
+	if _configuration.Debug {
+		log.Printf ("[ii] [83c65034]  output file starting...\n")
+	}
 	
 	_exitGroup.Add (1)
 	
@@ -1009,9 +1100,12 @@ func outputFileLooper (_context *OutputFileContext) (error) {
 		return nil
 	}
 	
-	log.Printf ("[10354775]  output file started;\n")
-	
 	_configuration := _context.configuration
+	
+	if _configuration.Debug {
+		log.Printf ("[ii] [10354775]  output file started;\n")
+	}
+	
 	_ticker := time.NewTicker (_configuration.TickerInterval)
 	
 	_stop : for {
@@ -1020,41 +1114,47 @@ func outputFileLooper (_context *OutputFileContext) (error) {
 			case _message := <- _context.messagesQueue :
 				outputFileTimestamp (_context)
 				if _error := outputFileProcess (_context, _message); _error != nil {
-					logError (_error, "[5fd6c601]  output file failed processing message!  ignoring!")
+					logError (_error, "[5fd6c601]  output file failed processing message;  ignoring!")
 				}
 			
 			case _signal := <- _context.signalsQueue :
 				switch _signal {
 					
 					case syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT :
-						log.Printf ("[c3f6650e]  output file interrupted by signal:  `%s`!  terminating!\n", _signal)
+						if _configuration.Debug {
+							log.Printf ("[ww] [c3f6650e]  output file interrupted by signal:  `%s`!  terminating!\n", _signal)
+						}
 						break _stop
 					
 					case syscall.SIGHUP :
-						log.Printf ("[8198be0d]  output file interrupted by signal:  `%s`!  flushing...\n", _signal)
+						if _configuration.Debug {
+							log.Printf ("[ii] [8198be0d]  output file interrupted by signal:  `%s`!  flushing...\n", _signal)
+						}
 						if _error := outputFileClose (_context, false); _error != nil {
-							logError (_error, "[7017a4da]  output file failed flushing!  ignoring!")
+							logError (_error, "[7017a4da]  output file failed flushing;  ignoring!")
 						}
 					
 					default :
-						log.Printf ("[3b5a9896]  output file interrupted by unexpected signal:  `%s`!  ignoring!\n", _signal)
+						log.Printf ("[ee] [3b5a9896]  output file interrupted by unexpected signal:  `%s`;  ignoring!\n", _signal)
 				}
 			
 			case <- _ticker.C :
 				outputFileTimestamp (_context)
 				if _error := outputFileClosePerhaps (_context); _error != nil {
-					logError (_error, "[9bc52216]  output file failed flushing!  ignoring!")
+					logError (_error, "[9bc52216]  output file failed flushing;  ignoring!")
 				}
 		}
 	}
 	
-	log.Printf ("[c0cd4992]  output file finalizing...\n")
+	if _configuration.Debug {
+		log.Printf ("[ii] [c0cd4992]  output file finalizing...\n")
+	}
 	if _error := outputFileFinalize (_context); _error != nil {
-		logError (_error, "[86400d3b]  output file failed to finalize!  ignoring!")
+		logError (_error, "[86400d3b]  output file failed to finalize;  ignoring!")
 		return _error
 	}
 	
-	log.Printf ("[cdecc5a4]  output file terminated;\n")
+	log.Printf ("[ii] [cdecc5a4]  output file terminated;\n")
 	return nil
 }
 
@@ -1109,49 +1209,56 @@ func outputFileOpen (_context *OutputFileContext) (error) {
 	_context.currentTimestampToken = _context.nowTimestampToken
 	_context.currentMessages = 0
 	
+	_randomToken := make ([]byte, 10)
+	rand.Read (_randomToken)
+	
 	_context.currentCurrentPath = fmt.Sprintf (
-			"%s%c%s%s-%06x-%06x%s",
+			"%s%c%s%s-%06x%06x%10x%s",
 			_configuration.CurrentStorePath,
 			os.PathSeparator,
 			_configuration.CurrentPrefix,
 			_context.nowTimestampToken,
-			os.Getpid () & 0xffffff,
 			_context.nowTimestamp.Unix () & 0xffffff,
+			os.Getpid () & 0xffffff,
+			_randomToken,
 			_configuration.CurrentSuffix,
 		)
 	
 	_context.currentArchivedPath = fmt.Sprintf (
-			"%s%c%s%s-%06x-%06x%s",
+			"%s%c%s%s-%06x%06x%10x%s",
 			_configuration.ArchivedStorePath,
 			os.PathSeparator,
 			_configuration.ArchivedPrefix,
 			_context.nowTimestamp.Format (_configuration.ArchivedTimestamp),
-			os.Getpid () & 0xffffff,
 			_context.nowTimestamp.Unix () & 0xffffff,
+			os.Getpid () & 0xffffff,
+			_randomToken,
 			_configuration.ArchivedSuffix,
 		)
 	
 	if _error := os.MkdirAll (path.Dir (_context.currentCurrentPath), _configuration.StoreMode); _error != nil {
-		log.Printf ("[9e694a9c]  failed opening current output file to `%s` (mkdir)!  ignoring!\n", _context.currentCurrentPath)
+		log.Printf ("[ee] [9e694a9c]  failed opening current output file to `%s` (mkdir);  ignoring!\n", _context.currentCurrentPath)
 		logError (_error, "")
 	}
 	if _file, _error := os.OpenFile (_context.currentCurrentPath, os.O_CREATE | os.O_EXCL | os.O_WRONLY | os.O_APPEND, _configuration.FileMode); _error == nil {
-		log.Printf ("[27432827]  succeeded opening current output file `%s`;\n", _context.currentCurrentPath)
+		if _configuration.Debug {
+			log.Printf ("[ii] [27432827]  succeeded opening current output file `%s`;\n", _context.currentCurrentPath)
+		}
 		_context.currentFile = _file
 	} else {
-		log.Printf ("[27432827]  failed opening current output file `%s` (open)!  ignoring!\n", _context.currentCurrentPath)
+		log.Printf ("[ee] [27432827]  failed opening current output file `%s` (open);  ignoring!\n", _context.currentCurrentPath)
 		logError (_error, "")
 		_context.currentFile = nil
 	}
 	
 	if _configuration.CurrentSymlinkPath != "" {
 		if _error := os.Remove (_configuration.CurrentSymlinkPath); (_error != nil) && ! os.IsNotExist (_error) {
-			logError (_error, "[fb4f5f7b]  failed symlink-ing current output file (unlink)!  ignoring!")
+			logError (_error, "[fb4f5f7b]  failed symlink-ing current output file (unlink);  ignoring!")
 		}
 		if _relativePath, _error := filepath.Rel (path.Dir (_configuration.CurrentSymlinkPath), _context.currentCurrentPath); _error != nil {
-			logError (_error, "[a578ba45]  failed symlink-ing current output file (relpath)!  ignoring!")
+			logError (_error, "[a578ba45]  failed symlink-ing current output file (relpath);  ignoring!")
 		} else if _error := os.Symlink (_relativePath, _configuration.CurrentSymlinkPath); _error != nil {
-			logError (_error, "[f0ccc0b5]  failed symlink-ing current output file (relpath)!  ignoring!")
+			logError (_error, "[f0ccc0b5]  failed symlink-ing current output file (relpath);  ignoring!")
 		}
 	}
 	
@@ -1173,19 +1280,19 @@ func outputFileClosePerhaps (_context *OutputFileContext) (error) {
 	_shouldClose := false
 	if ! _shouldClose && (_context.currentMessages >= _configuration.Messages) {
 		if _configuration.Debug {
-			log.Printf ("[6608f486]  current file has reached its maximum messages count limit;\n")
+			log.Printf ("[ii] [6608f486]  output file has reached its maximum messages count limit;\n")
 		}
 		_shouldClose = true
 	}
 	if ! _shouldClose && (_context.nowTimestamp.Sub (_context.currentTimestamp) >= _configuration.Timeout) {
 		if _configuration.Debug {
-			log.Printf ("[963bf22e]  current file has reached its maximum age limit;\n")
+			log.Printf ("[ii] [963bf22e]  output file has reached its maximum age limit;\n")
 		}
 		_shouldClose = true
 	}
 	if ! _shouldClose && (_context.currentTimestampToken != _context.nowTimestampToken) {
 		if _configuration.Debug {
-			log.Printf ("[214f5ea7]  current file has a different timestamp token;\n")
+			log.Printf ("[ii] [214f5ea7]  output file has a different timestamp token;\n")
 		}
 		_shouldClose = true
 	}
@@ -1210,34 +1317,40 @@ func outputFileClose (_context *OutputFileContext, _wait bool) (error) {
 	_configuration := _context.configuration
 	
 	if _error := _context.currentFile.Close (); _error == nil {
-		log.Printf ("[c1b80cc7]  succeeded closing previous output file `%s`;\n", _context.currentCurrentPath)
+		if _configuration.Debug {
+			log.Printf ("[ii] [c1b80cc7]  succeeded closing previous output file `%s`;\n", _context.currentCurrentPath)
+		}
 	} else {
-		log.Printf ("[c1b80cc7]  failed closing previous output file `%s`!  ignoring!\n", _context.currentCurrentPath)
+		log.Printf ("[ee] [c1b80cc7]  failed closing previous output file `%s`;  ignoring!\n", _context.currentCurrentPath)
 		logError (_error, "")
 	}
 	
 	if _error := os.Remove (_configuration.CurrentSymlinkPath); (_error != nil) && ! os.IsNotExist (_error) {
-		logError (_error, "[5df85030]  failed symlink-ing current output file (unlink)!  ignoring!")
+		logError (_error, "[5df85030]  failed symlink-ing current output file (unlink);  ignoring!")
 	}
 	
 	if _context.currentCurrentPath != _context.currentArchivedPath {
 		if _error := os.MkdirAll (path.Dir (_context.currentArchivedPath), _configuration.StoreMode); _error != nil {
-			log.Printf ("[0febdcf9]  failed renaming previous output file to `%s` (mkdir)!  ignoring!\n", _context.currentArchivedPath)
+			log.Printf ("[ee] [0febdcf9]  failed renaming previous output file to `%s` (mkdir);  ignoring!\n", _context.currentArchivedPath)
 			logError (_error, "")
 		}
 		if _error := os.Rename (_context.currentCurrentPath, _context.currentArchivedPath); _error == nil {
-			log.Printf ("[04157e71]  succeeded renaming previous output file to `%s`;\n", _context.currentArchivedPath)
+			if _configuration.Debug {
+				log.Printf ("[ii] [04157e71]  succeeded renaming previous output file to `%s`;\n", _context.currentArchivedPath)
+			}
 		} else {
-			log.Printf ("[7ad610e7]  failed renaming previous output file to `%s` (rename)!  ignoring!\n", _context.currentArchivedPath)
+			log.Printf ("[ee] [7ad610e7]  failed renaming previous output file to `%s` (rename);  ignoring!\n", _context.currentArchivedPath)
 			logError (_error, "")
 		}
 	}
 	
 	if _configuration.ArchivedCompressSuffix != "" {
 		if _error := outputFileCompress (_context, _wait); _error != nil {
-			log.Printf ("[9e80c303]  failed compressing previous output file to `%s` (rename)!  ignoring!\n", _context.currentArchivedPath)
+			log.Printf ("[ee] [9e80c303]  failed compressing previous output file to `%s` (rename);  ignoring!\n", _context.currentArchivedPath)
 			logError (_error, "")
 		}
+	} else {
+		log.Printf ("[ii] [c59ca93f]  succeeded archiving output file `%s`;\n", _context.currentArchivedPath)
 	}
 	
 	_context.currentFile = nil
@@ -1258,7 +1371,9 @@ func outputFileCompress (_context *OutputFileContext, _wait bool) (error) {
 	_compressedPathFinal := _uncompressedPath + _configuration.ArchivedCompressSuffix
 	_compressedPathTemp := _uncompressedPath + _configuration.ArchivedCompressSuffix + ".tmp"
 	
-	log.Printf ("[2d5bbfb2]  compressing previous output file to `%s`...\n", _compressedPathFinal)
+	if _configuration.Debug {
+		log.Printf ("[ii] [2d5bbfb2]  compressing previous output file to `%s`...\n", _compressedPathFinal)
+	}
 	
 	var _uncompressedFile *os.File
 	var _compressedFile *os.File
@@ -1313,9 +1428,10 @@ func outputFileCompress (_context *OutputFileContext, _wait bool) (error) {
 	_compressedFile = nil
 	
 	_finalize := func () (error) {
+		
 		if _state, _error := _process.Wait (); _error == nil {
 			if ! _state.Success () {
-				log.Printf ("[09463fb9]  failed executing compress process (exit):  `%s`!\n", _state.Sys ())
+				log.Printf ("[ee] [09463fb9]  failed executing compress process (exit):  `%s`!\n", _state.Sys ())
 				_process = nil
 				return _abort ()
 			}
@@ -1324,6 +1440,7 @@ func outputFileCompress (_context *OutputFileContext, _wait bool) (error) {
 			_process = nil
 			return _abort ()
 		}
+		
 		if _error := os.Rename (_compressedPathTemp, _compressedPathFinal); _error != nil {
 			logError (_error, "[dd8ff061]  failed renaming compressed file!")
 			return _abort ()
@@ -1332,8 +1449,15 @@ func outputFileCompress (_context *OutputFileContext, _wait bool) (error) {
 			logError (_error, "[9391f70d]  failed deleting uncompressed file!")
 			return _abort ()
 		}
-		log.Printf ("[9b4015d2]  succeeded compressing previous output file to `%s`;\n", _compressedPathFinal)
+		
+		if _configuration.Debug {
+			log.Printf ("[ii] [9b4015d2]  succeeded compressing previous output file to `%s`;\n", _compressedPathFinal)
+		}
+		
+		log.Printf ("[ii] [07a39e08]  succeeded archiving output file `%s`;\n", _compressedPathFinal)
+		
 		_exitGroup.Done ()
+		
 		return nil
 	}
 	
@@ -1399,7 +1523,9 @@ func outputStreamProcess (_stream *os.File, _message *Message, _pretty bool, _se
 func main_0 () (error) {
 	
 	
-	log.Printf ("[69922ece]  configuring services...\n")
+	if DefaultGlobalDebug {
+		log.Printf ("[ii] [69922ece]  configuring services...\n")
+	}
 	var _configuration *Configuration = nil
 	if _configuration_0, _error := configure (os.Args[1:]); _error == nil {
 		_configuration = _configuration_0
@@ -1408,7 +1534,9 @@ func main_0 () (error) {
 	}
 	
 	
-	log.Printf ("[e1603153]  initializing services...\n")
+	if _configuration.Debug {
+		log.Printf ("[ii] [e1603153]  initializing services...\n")
+	}
 	var _syslogQueueSize uint = DefaultInputSyslogQueueSize
 	if _configuration.InputSyslog != nil {
 		_syslogQueueSize = _configuration.InputSyslog.QueueSize
@@ -1421,7 +1549,6 @@ func main_0 () (error) {
 	_exitGroup := & sync.WaitGroup {}
 	
 	
-	// signal.Ignore ()
 	signal.Notify (_mainSignalsQueue, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	signal.Notify (_mainSignalsQueue, syscall.SIGHUP)
 	signal.Notify (_mainSignalsQueue, syscall.SIGUSR1, syscall.SIGUSR2)
@@ -1429,7 +1556,9 @@ func main_0 () (error) {
 	
 	var _inputSyslogContext *InputSyslogContext = nil
 	if _configuration.InputSyslog != nil {
-		log.Printf ("[1b82323e]  initializing input syslog...\n")
+		if _configuration.Debug {
+			log.Printf ("[ii] [1b82323e]  initializing input syslog...\n")
+		}
 		_configuration := _configuration.InputSyslog
 		_signalsQueue := make (chan os.Signal, DefaultSignalsQueueSize)
 		_serviceSignalsQueues = append (_serviceSignalsQueues, _signalsQueue)
@@ -1444,7 +1573,9 @@ func main_0 () (error) {
 	
 	var _outputStdoutContext *OutputStdoutContext = nil
 	if _configuration.OutputStdout != nil {
-		log.Printf ("[cf9ea565]  initializing output stdout...\n")
+		if _configuration.Debug {
+			log.Printf ("[ii] [cf9ea565]  initializing output stdout...\n")
+		}
 		_configuration := _configuration.OutputStdout
 		_messagesQueue := make (chan *Message, _configuration.QueueSize)
 		_messagesQueues = append (_messagesQueues, _messagesQueue)
@@ -1461,7 +1592,9 @@ func main_0 () (error) {
 	
 	var _outputFileContext *OutputFileContext = nil
 	if _configuration.OutputFile != nil {
-		log.Printf ("[41085a24]  initializing output file...\n")
+		if _configuration.Debug {
+			log.Printf ("[ii] [41085a24]  initializing output file...\n")
+		}
 		_configuration := _configuration.OutputFile
 		_messagesQueue := make (chan *Message, _configuration.QueueSize)
 		_messagesQueues = append (_messagesQueues, _messagesQueue)
@@ -1478,7 +1611,9 @@ func main_0 () (error) {
 	
 	var _parserContext *ParserContext = nil
 	{
-		log.Printf ("[63ca1586]  initializing parser...\n")
+		if _configuration.Debug {
+			log.Printf ("[ii] [63ca1586]  initializing parser...\n")
+		}
 		_configuration := _configuration.Parser
 		if _context, _error := parserInitialize (_configuration); _error == nil {
 			_parserContext = _context
@@ -1490,7 +1625,9 @@ func main_0 () (error) {
 	
 	var _dequeueContext *DequeueContext = nil
 	{
-		log.Printf ("[b86862c9]  initializing dequeue...\n")
+		if _configuration.Debug {
+			log.Printf ("[ii] [b86862c9]  initializing dequeue...\n")
+		}
 		_configuration := _configuration.Dequeue
 		_signalsQueue := make (chan os.Signal, DefaultSignalsQueueSize)
 		_serviceSignalsQueues = append (_serviceSignalsQueues, _signalsQueue)
@@ -1503,7 +1640,9 @@ func main_0 () (error) {
 	}
 	
 	
-	log.Printf ("[e5759817]  initialized services!\n")
+	if _configuration.Debug {
+		log.Printf ("[ii] [e5759817]  initialized services!\n")
+	}
 	
 	
 	_stop : for {
@@ -1526,7 +1665,7 @@ func main_0 () (error) {
 	go func () () {
 		for {
 			time.Sleep (1 * time.Second)
-			log.Printf ("[cd90630d]  terminating services...\n")
+			log.Printf ("[ww] [cd90630d]  terminating services...\n")
 			for _, _signalsQueue := range _serviceSignalsQueues {
 				select {
 					case _signalsQueue <- syscall.SIGTERM :
@@ -1539,7 +1678,9 @@ func main_0 () (error) {
 	
 	_exitGroup.Wait ()
 	
-	log.Printf ("[b3181816]  terminated services!\n")
+	if _configuration.Debug {
+		log.Printf ("[ii] [b3181816]  terminated services!\n")
+	}
 	
 	
 	return nil
@@ -1554,7 +1695,7 @@ func main () () {
 		os.Exit (0)
 	} else {
 		logError (_error, "")
-		log.Printf ("[01ede391]  aborting!\n")
+		log.Printf ("[!!] [01ede391]  aborting!\n")
 		os.Exit (1)
 	}
 }
@@ -1567,15 +1708,15 @@ func logError (_error error, _message string) () {
 	if _message == "" {
 		_message = "[906eea03]  unexpected error encountered!";
 	}
-	log.Printf ("%s\n", _message)
+	log.Printf ("[ee] %s\n", _message)
 	
 	_errorString := _error.Error ()
 	if _matches, _matchesError := regexp.MatchString (`^\[[0-9a-f]{8}\] [^\n]+$`, _errorString); _matchesError == nil {
 		if _matches {
-			log.Printf ("%s\n", _errorString)
+			log.Printf ("[ee] %s\n", _errorString)
 		} else {
-			log.Printf ("[8a968eeb]  %q\n", _errorString)
-			log.Printf ("[72c99d89]  %#v\n", _error)
+			log.Printf ("[ee] [8a968eeb]  %q\n", _errorString)
+			log.Printf ("[ee] [72c99d89]  %#v\n", _error)
 		}
 	} else {
 		panic (_matchesError)

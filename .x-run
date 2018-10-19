@@ -38,7 +38,9 @@
 	"${X_RUN[@]}" ':: go / build / main / debug'
 	exec -- ./.outputs/main \
 			--input-syslog-listen-udp 127.35.195.99:8514 \
+			--input-syslog-format rfc5424 \
 			--output-stdout-json-pretty=false \
+			--report-timeout 6s \
 		#
 	exit -- 1
 !!
@@ -48,6 +50,7 @@
 	"${X_RUN[@]}" ':: go / build / main / debug'
 	exec -- ./.outputs/main \
 			--input-syslog-listen-udp 127.35.195.99:8514 \
+			--input-syslog-format rfc5424 \
 			--output-stdout=false \
 			--output-file-current-symlink ./.logs/tail \
 			--output-file-current-store ./.logs/current \
@@ -56,6 +59,7 @@
 			--output-file-json-pretty=false \
 			--output-file-messages 32 \
 			--output-file-timeout 6s \
+			--report-timeout 6s \
 		#
 	exit -- 1
 !!
