@@ -37,7 +37,7 @@
 	test "${#}" -eq 0
 	"${X_RUN[@]}" ':: go / build / main / debug'
 	exec -- ./.outputs/main \
-			--syslog-listen-udp 127.35.195.99:8514 \
+			--input-syslog-listen-udp 127.35.195.99:8514 \
 			--output-stdout-json-pretty=false \
 		#
 	exit -- 1
@@ -47,7 +47,7 @@
 	test "${#}" -eq 0
 	"${X_RUN[@]}" ':: go / build / main / debug'
 	exec -- ./.outputs/main \
-			--syslog-listen-udp 127.35.195.99:8514 \
+			--input-syslog-listen-udp 127.35.195.99:8514 \
 			--output-stdout=false \
 			--output-file-current-symlink ./.logs/tail \
 			--output-file-current-store ./.logs/current \
