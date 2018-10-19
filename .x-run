@@ -33,8 +33,8 @@
 	exit -- 1
 !!
 
+
 << go / execute / main / udp + stdout-only
-	test "${#}" -eq 0
 	"${X_RUN[@]}" ':: go / build / main / debug'
 	exec -- ./.outputs/main \
 			--input-syslog-listen-udp 127.35.195.99:8514 \
@@ -43,12 +43,76 @@
 			--parser-message-json=true \
 			--parser-message-raw=false \
 			--report-timeout 6s \
+			"${@}" \
 		#
 	exit -- 1
 !!
 
+<< go / execute / main / udp + stdout-only + jq / replace
+	"${X_RUN[@]}" ':: go / build / main / debug'
+	_jq_script='
+			
+			if (.application == "haproxy") then
+				.message_extra = {
+					request_id : .message_json.h_r_i,
+					session_id : .message_json.h_s_i,
+				}
+				| if (.message_extra.request_id[0:1] >= "4") then
+					.message_json = .message_extra
+					| del (.message_extra)
+					| del (.message_raw)
+				else null end
+			else
+				null
+			end
+			
+		'
+	exec -- ./.outputs/main \
+			--input-syslog-listen-udp 127.35.195.99:8514 \
+			--input-syslog-format rfc5424 \
+			--output-stdout-json-pretty=true \
+			--parser-message-json=true \
+			--parser-message-raw=false \
+			--report-timeout 6s \
+			--parser-external-command 'jq --unbuffered @{script}' \
+			--parser-external-script "${_jq_script}" \
+			--parser-external-replace=true \
+			"${@}" \
+		#
+	exit -- 1
+!!
+
+<< go / execute / main / udp + stdout-only + jq / augment
+	"${X_RUN[@]}" ':: go / build / main / debug'
+	_jq_script='
+			
+			if (.application == "haproxy") then
+				{
+					request_id : .message_json.h_r_i,
+					session_id : .message_json.h_s_i,
+				}
+			else
+				null
+			end
+			
+		'
+	exec -- ./.outputs/main \
+			--input-syslog-listen-udp 127.35.195.99:8514 \
+			--input-syslog-format rfc5424 \
+			--output-stdout-json-pretty=true \
+			--parser-message-json=true \
+			--parser-message-raw=false \
+			--report-timeout 6s \
+			--parser-external-command 'jq --unbuffered @{script}' \
+			--parser-external-script "${_jq_script}" \
+			--parser-external-replace=false \
+			"${@}" \
+		#
+	exit -- 1
+!!
+
+
 << go / execute / main / udp + file-only
-	test "${#}" -eq 0
 	"${X_RUN[@]}" ':: go / build / main / debug'
 	exec -- ./.outputs/main \
 			--input-syslog-listen-udp 127.35.195.99:8514 \
@@ -59,11 +123,12 @@
 			--output-file-archived-store ./.logs/archived \
 			--output-file-archived-compress xz \
 			--output-file-json-pretty=false \
-			--output-file-messages 32 \
+			--output-file-messages 6 \
 			--output-file-timeout 6s \
 			--parser-message-json=true \
 			--parser-message-raw=true \
 			--report-timeout 6s \
+			"${@}" \
 		#
 	exit -- 1
 !!

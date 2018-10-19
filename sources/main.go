@@ -10,6 +10,7 @@ import "encoding/hex"
 import "encoding/json"
 import "flag"
 import "fmt"
+import "io"
 import "log"
 import "os"
 import "os/exec"
@@ -71,6 +72,7 @@ const DefaultOutputBufferSize = 16 * 1024
 const DefaultParserMessageJson = true
 const DefaultParserMessageRaw = true
 const DefaultParserMessageSha256 = true
+const DefaultParserExternalReplace = false
 const DefaultParserDebug = false
 
 const DefaultDequeueTickerInterval = 6 * time.Second
@@ -97,6 +99,7 @@ type Message struct {
 	MessageSha256 string `json:"message_sha256,omitempty"`
 	MessageText string `json:"message_text,omitempty"`
 	MessageJson json.RawMessage `json:"message_json,omitempty"`
+	MessageExtra json.RawMessage `json:"message_extra,omitempty"`
 }
 
 
@@ -216,6 +219,7 @@ type DequeueContext struct {
 	initialized bool
 	
 	sequence uint64
+	dropped uint64
 	
 	syslogQueue <-chan syslog_format.LogParts
 	outboundQueues [] chan<- *Message
@@ -232,12 +236,21 @@ type ParserConfiguration struct {
 	MessageRaw bool
 	MessageSha256 bool
 	Debug bool
+	
+	ExternalCommand []string
+	ExternalReplace bool
 }
 
 type ParserContext struct {
 	
 	configuration *ParserConfiguration
 	initialized bool
+	
+	externalCommand *exec.Cmd
+	externalOutputRaw io.WriteCloser
+	externalInputRaw io.ReadCloser
+	externalOutputJson *json.Encoder
+	externalInputJson *json.Decoder
 }
 
 
@@ -301,6 +314,9 @@ func configure (_arguments []string) (*Configuration, error) {
 	_parserMessageJson := _flags.Bool ("parser-message-json", DefaultParserMessageJson, "true (*) | false")
 	_parserMessageRaw := _flags.Bool ("parser-message-raw", DefaultParserMessageRaw, "true (*) | false")
 	_parserMessageSha256 := _flags.Bool ("parser-message-sha256", DefaultParserMessageSha256, "true (*) | false")
+	_parserExternalCommand := _flags.String ("parser-external-command", "", "<command> <argument> ...")
+	_parserExternalScript := _flags.String ("parser-external-script", "", "<script>")
+	_parserExternalReplace := _flags.Bool ("parser-external-replace", DefaultParserExternalReplace, "true | false (*)")
 	_parserDebug := _flags.Bool ("parser-debug", DefaultParserDebug, "true | false (*)")
 	
 	_forcedDebug := _flags.Bool ("debug", false, "true | false (*)")
@@ -458,10 +474,28 @@ func configure (_arguments []string) (*Configuration, error) {
 	_globalDebug = _globalDebug || _dequeueConfiguration.Debug
 	
 	
+	var _parserExternalCommand_0 []string = nil
+	if *_parserExternalCommand != "" {
+		_parserExternalCommand_0 = strings.Split (strings.TrimSpace (*_parserExternalCommand), " ")
+		if *_parserExternalScript != "" {
+			for _argumentIndex, _argumentValue := range _parserExternalCommand_0[1:] {
+				if _argumentValue == "@{script}" {
+					_parserExternalCommand_0[_argumentIndex + 1] = *_parserExternalScript
+				}
+			}
+		}
+	} else if *_parserExternalScript != "" {
+		_parserExternalCommand_0 = []string {
+				"sh", "-c", *_parserExternalScript,
+			}
+	}
+	
 	_parserConfiguration := & ParserConfiguration {
 			MessageJson : *_parserMessageJson,
 			MessageRaw : *_parserMessageRaw,
 			MessageSha256 : *_parserMessageSha256,
+			ExternalCommand : _parserExternalCommand_0,
+			ExternalReplace : *_parserExternalReplace,
 			Debug : *_parserDebug || *_forcedDebug,
 		}
 	_globalDebug = _globalDebug || _parserConfiguration.Debug
@@ -681,7 +715,7 @@ func (_syslogQueue InputSyslogHandler) Handle (_message syslog_format.LogParts, 
 	if _error == nil {
 		_syslogQueue <- _message
 	} else {
-		logError (_error, "")
+		logError (_error, "[258484e5]  input syslog failed to parse message;  ignoring!")
 	}
 }
 
@@ -796,9 +830,7 @@ func dequeueLooper (_context *DequeueContext) (error) {
 		if _message != nil {
 			_context.sequence += 1
 			if _error := dequeueProcess (_context, _message); _error != nil {
-				logError (_error, fmt.Sprintf ("[46d8f692]  unexpected error encountered while processing the message #%d;  ignoring!", _context.sequence))
-			} else if _configuration.Debug {
-				log.Printf ("[ii] [4e4ef11d]  dequeue succeeded processing the message #%d;\n", _context.sequence)
+				logError (_error, fmt.Sprintf ("[46d8f692]  dequeue failed processing the message #%d;  ignoring!", _context.sequence))
 			}
 			if (_context.sequence % uint64 (_configuration.ReportCounter)) == 0 {
 				_shouldReport = true
@@ -814,9 +846,9 @@ func dequeueLooper (_context *DequeueContext) (error) {
 			_deltaSequence := _context.sequence - _lastReportSequence
 			_deltaSpeed := float64 (_deltaSequence) / _deltaTimestamp
 			if _deltaSequence > 0 {
-				log.Printf ("[ii] [5cf68979]  processed %d K messages (currently %d at %.2f m/s, in total %d);\n", _context.sequence / 1000, _deltaSequence, _deltaSpeed, _context.sequence)
+				log.Printf ("[ii] [5cf68979]  processed %d K messages (currently %d at %.2f m/s, in total %d, dropped %d);\n", _context.sequence / 1000, _deltaSequence, _deltaSpeed, _context.sequence, _context.dropped)
 			} else {
-				log.Printf ("[ii] [9eea1474]  processed %d K messages (in total %d);\n", _context.sequence / 1000, _context.sequence)
+				log.Printf ("[ii] [9eea1474]  processed %d K messages (in total %d, dropped %d);\n", _context.sequence / 1000, _context.sequence, _context.dropped)
 			}
 			_lastReportTimestamp = _timestamp
 			_lastReportSequence = _context.sequence
@@ -835,7 +867,7 @@ func dequeueLooper (_context *DequeueContext) (error) {
 		log.Printf ("[ii] [d39d8157]  dequeue finalizing...\n")
 	}
 	if _error := dequeueFinalize (_context); _error != nil {
-		logError (_error, "[b31a98f6]  dequeue failed to finalize;  ignoring!\n")
+		logError (_error, "[b31a98f6]  dequeue failed to finalize;  ignoring!")
 		return _error
 	}
 	
@@ -850,7 +882,7 @@ func dequeueProcess (_context *DequeueContext, _syslogMessage syslog_format.LogP
 		return fmt.Errorf ("[1740da8a]  dequeue is not initialized!")
 	}
 	
-	// _configuration := _context.configuration
+	_configuration := _context.configuration
 	
 	var _message *Message
 	if _message_0, _error := parserProcess (_context.parser, _syslogMessage, _context.sequence); _error == nil {
@@ -859,9 +891,21 @@ func dequeueProcess (_context *DequeueContext, _syslogMessage syslog_format.LogP
 		return _error
 	}
 	
-	for _, _outboundQueue := range _context.outboundQueues {
-		select {
-			case _outboundQueue <- _message :
+	if _message != nil {
+		for _, _outboundQueue := range _context.outboundQueues {
+			select {
+				case _outboundQueue <- _message :
+			}
+		}
+	} else {
+		_context.dropped += 1
+	}
+	
+	if _configuration.Debug {
+		if _message != nil {
+			log.Printf ("[ii] [4e4ef11d]  dequeue succeeded processing the message #%d;\n", _context.sequence)
+		} else {
+			log.Printf ("[ii] [b3d065cf]  dequeue dropped processing the message #%d;\n", _context.sequence)
 		}
 	}
 	
@@ -878,6 +922,10 @@ func parserInitialize (_configuration *ParserConfiguration) (*ParserContext, err
 			initialized : true,
 		}
 	
+	if _error := parserExternalCommandStart (_context); _error != nil {
+		return nil, _error
+	}
+	
 	return _context, nil
 }
 
@@ -888,9 +936,11 @@ func parserFinalize (_context *ParserContext) (error) {
 		return nil
 	}
 	
+	_error := parserExternalCommandStop (_context)
+	
 	_context.initialized = false
 	
-	return nil
+	return _error
 }
 
 
@@ -910,12 +960,12 @@ func parserProcess (_context *ParserContext, _syslogMessage syslog_format.LogPar
 		if _messageText_0, _messageIsString := _messageText_0.(string); _messageIsString {
 			_messageText = _messageText_0
 		} else {
-			log.Printf ("[ee] [87d571ff]  syslog message #%d is missing `message` (attribute is not a string);  ignoring!\n", _sequence)
+			log.Printf ("[ee] [87d571ff]  parsing syslog message #%d is missing `message` (attribute is not a string);  ignoring!\n", _sequence)
 			_messageText = ""
 		}
 		delete (_syslogMessage, "message")
 	} else {
-		log.Printf ("[ee] [6e096811]  syslog message #%d is missing `message` (attribute does not exist);  ignoring!\n", _sequence)
+		log.Printf ("[ee] [6e096811]  parsing syslog message #%d is missing `message` (attribute does not exist);  ignoring!\n", _sequence)
 		_messageText = ""
 	}
 	
@@ -924,12 +974,12 @@ func parserProcess (_context *ParserContext, _syslogMessage syslog_format.LogPar
 		if _application_0, _applicationIsString := _application_0.(string); _applicationIsString {
 			_application = _application_0
 		} else {
-			log.Printf ("[ee] [7cf38fac]  syslog message #%d is missing `app_name` (attribute is not a string);  ignoring!\n", _sequence)
+			log.Printf ("[ee] [7cf38fac]  parsing syslog message #%d is missing `app_name` (attribute is not a string);  ignoring!\n", _sequence)
 			_application = "<unknown>"
 		}
 		delete (_syslogMessage, "app_name")
 	} else {
-		log.Printf ("[ee] [d67aba45]  syslog message #%d is missing `app_name` (attribute does not exist);  ignoring!\n", _sequence)
+		log.Printf ("[ee] [d67aba45]  parsing syslog message #%d is missing `app_name` (attribute does not exist);  ignoring!\n", _sequence)
 		_application = "<unknown>"
 	}
 	
@@ -962,12 +1012,12 @@ func parserProcess (_context *ParserContext, _syslogMessage syslog_format.LogPar
 				_level = 7
 				_levelText = "debug"
 			default :
-				log.Printf ("[ee] [a11d7539]  syslog message #%d has an invalid severity `%d`;  ignoring!\n", _sequence, _severity_0)
+				log.Printf ("[ee] [a11d7539]  parsing syslog message #%d has an invalid severity `%d`;  ignoring!\n", _sequence, _severity_0)
 				_level = -1
 				_levelText = "<undefined>"
 		}
 	} else {
-		log.Printf ("[ee] [aa9b6e25]  syslog message #%d is missing `severity` (attribute does not exist);  ignoring!\n", _sequence)
+		log.Printf ("[ee] [aa9b6e25]  parsing syslog message #%d is missing `severity` (attribute does not exist);  ignoring!\n", _sequence)
 		_level = -1
 		_levelText = "<unknown>"
 	}
@@ -977,15 +1027,12 @@ func parserProcess (_context *ParserContext, _syslogMessage syslog_format.LogPar
 		if _messageRaw_0, _messageRawIsString := _messageRaw_0.([]byte); _messageRawIsString {
 			_messageRaw = _messageRaw_0
 		} else {
-			log.Printf ("[ee] [fbf8ef52]  syslog message #%d is missing `_message_raw` (attribute is not a buffer);  ignoring!\n", _sequence)
+			log.Printf ("[ee] [fbf8ef52]  parsing syslog message #%d is missing `_message_raw` (attribute is not a buffer);  ignoring!\n", _sequence)
 			_messageRaw = nil
 		}
 		delete (_syslogMessage, "_message_raw")
 	} else {
-		log.Printf ("[ee] [442c9f2d]  syslog message #%d is missing `_message_raw` (attribute does not exist);  ignoring!\n", _sequence)
-		_messageRaw = nil
-	}
-	if ! _configuration.MessageRaw {
+		log.Printf ("[ee] [442c9f2d]  parsing syslog message #%d is missing `_message_raw` (attribute does not exist);  ignoring!\n", _sequence)
 		_messageRaw = nil
 	}
 	
@@ -994,15 +1041,12 @@ func parserProcess (_context *ParserContext, _syslogMessage syslog_format.LogPar
 		if _messageSha256_0, _messageSha256IsString := _messageSha256_0.(string); _messageSha256IsString {
 			_messageSha256 = _messageSha256_0
 		} else {
-			log.Printf ("[ee] [4b730aaa]  syslog message #%d is missing `_message_sha256` (attribute is not a string);  ignoring!\n", _sequence)
+			log.Printf ("[ee] [4b730aaa]  parsing syslog message #%d is missing `_message_sha256` (attribute is not a string);  ignoring!\n", _sequence)
 			_messageSha256 = ""
 		}
 		delete (_syslogMessage, "_message_sha256")
 	} else {
-		log.Printf ("[ee] [8898fe78]  syslog message #%d is missing `_message_sha256` (attribute does not exist);  ignoring!\n", _sequence)
-		_messageSha256 = ""
-	}
-	if ! _configuration.MessageSha256 {
+		log.Printf ("[ee] [8898fe78]  parsing syslog message #%d is missing `_message_sha256` (attribute does not exist);  ignoring!\n", _sequence)
 		_messageSha256 = ""
 	}
 	
@@ -1031,7 +1075,188 @@ func parserProcess (_context *ParserContext, _syslogMessage syslog_format.LogPar
 			Syslog : _syslogMessage,
 		}
 	
+	if _messageReplacement, _error := parserExternalCommandProcess (_context, _message); _error == nil {
+		_message = _messageReplacement
+	} else {
+		logError (_error, "[ee] [5359422a]  parser external command failed to process message;  ignoring!")
+	}
+	
+	if _message != nil {
+		if ! _configuration.MessageRaw {
+			_message.MessageRaw = nil
+		}
+		if ! _configuration.MessageSha256 {
+			_message.MessageSha256 = ""
+		}
+	} else {
+	}
+	
 	return _message, nil
+}
+
+
+
+
+func parserExternalCommandStart (_context *ParserContext) (error) {
+	
+	_configuration := _context.configuration
+	
+	if _context.externalCommand != nil {
+		return nil
+	}
+	
+	if _configuration.ExternalCommand == nil {
+		return nil
+	}
+	
+	if _configuration.Debug {
+		log.Printf ("[ii] [899b93ef]  parser external process starting: `%q`...\n", _configuration.ExternalCommand)
+	}
+	
+	_command := exec.Command (_configuration.ExternalCommand[0], _configuration.ExternalCommand[1:] ...)
+	_command.Stderr = os.Stderr
+	
+	var _commandStdin io.WriteCloser
+	if _stream, _error := _command.StdinPipe (); _error == nil {
+		_commandStdin = _stream
+	} else {
+		logError (_error, "")
+		return fmt.Errorf ("[64960c3e]  parser external process failed to initialize (stdin)!")
+	}
+	
+	var _commandStdout io.ReadCloser
+	if _stream, _error := _command.StdoutPipe (); _error == nil {
+		_commandStdout = _stream
+	} else {
+		logError (_error, "")
+		return fmt.Errorf ("[8609de71]  parser external process failed to initialize (stdout)!")
+	}
+	
+	if _error := _command.Start (); _error != nil {
+		logError (_error, "")
+		return fmt.Errorf ("[6b9e2bd0]  parser external process failed to initialize (exec)!")
+	}
+	
+	_context.externalCommand = _command
+	_context.externalOutputRaw = _commandStdin
+	_context.externalInputRaw = _commandStdout
+	
+	_context.externalOutputJson = json.NewEncoder (_context.externalOutputRaw)
+	_context.externalInputJson = json.NewDecoder (_context.externalInputRaw)
+	
+	if _configuration.ExternalReplace {
+		_context.externalInputJson.DisallowUnknownFields ()
+	}
+	
+	if _configuration.Debug {
+		log.Printf ("[ii] [5a58d261]  parser external process started;\n")
+	}
+	
+	return nil
+}
+
+
+func parserExternalCommandStop (_context *ParserContext) (error) {
+	
+	_configuration := _context.configuration
+	
+	if _context.externalOutputRaw != nil {
+		_context.externalOutputRaw.Close ()
+		_context.externalOutputRaw = nil
+		_context.externalOutputJson = nil
+	}
+	if _context.externalInputRaw != nil {
+		_context.externalInputRaw.Close ()
+		_context.externalInputRaw = nil
+		_context.externalInputJson = nil
+	}
+	
+	if _context.externalCommand != nil {
+		
+		if _configuration.Debug {
+			log.Printf ("[ii] [6b0a0f45]  parser external process terminating...\n")
+		}
+		
+		time.Sleep (500 * time.Millisecond)
+		_context.externalCommand.Process.Kill ()
+		_context.externalCommand.Process.Wait ()
+		
+		if _configuration.Debug {
+			log.Printf ("[ii] [3a781f0f]  parser external process terminated;\n")
+		}
+		
+		_context.externalCommand = nil
+	}
+	
+	return nil
+}
+
+
+func parserExternalCommandRestart (_context *ParserContext) (error) {
+	if _error := parserExternalCommandStop (_context); _error != nil {
+		logError (_error, "[f313cb7f]  parser external failed to stop;  ignoring!")
+	}
+	if _error := parserExternalCommandStart (_context); _error != nil {
+		logError (_error, "[39592e95]  parser external failed to start;  ignoring!")
+	}
+	return nil
+}
+
+
+func parserExternalCommandProcess (_context *ParserContext, _message *Message) (*Message, error) {
+	
+	_configuration := _context.configuration
+	
+	_shouldRestart := false
+	_shouldFail := false
+	
+	if _error := parserExternalCommandStart (_context); _error != nil {
+		logError (_error, "[4f52cde3]  parser external failed to start;  ignoring!")
+		_shouldFail = true
+	}
+	
+	if _context.externalOutputJson != nil {
+		if _error := _context.externalOutputJson.Encode (_message); _error != nil {
+			logError (_error, "[341a1275]  parser external failed to encode and output message;  ignoring!")
+			_shouldRestart = true
+			_shouldFail = true
+		} else {
+			if _context.externalInputJson != nil {
+				if _configuration.ExternalReplace {
+					var _messageReplacement *Message
+					if _error := _context.externalInputJson.Decode (&_messageReplacement); _error != nil {
+						logError (_error, "[14b47643]  parser external failed to input and decode message replacement;  ignoring!")
+						_shouldRestart = true
+						_shouldFail = true
+					} else {
+						_message = _messageReplacement
+					}
+				} else {
+					var _messageExtra json.RawMessage = nil
+					if _error := _context.externalInputJson.Decode (&_messageExtra); _error != nil {
+						logError (_error, "[14b47643]  parser external failed to input and decode message extra;  ignoring!")
+						_shouldRestart = true
+						_shouldFail = true
+					} else {
+						_message.MessageExtra = _messageExtra
+					}
+				}
+			}
+		}
+	}
+	
+	if _shouldRestart {
+		log.Printf ("[ii]  parser external restarting...\n")
+		if _error := parserExternalCommandRestart (_context); _error != nil {
+			logError (_error, "[0a328daf]  parser external failed to restart;  ignoring!")
+		}
+	}
+	
+	if _shouldFail {
+		return nil, fmt.Errorf ("[f8919556]  parser external failed!")
+	} else {
+		return _message, nil
+	}
 }
 
 
@@ -1229,7 +1454,7 @@ func outputFileLooper (_context *OutputFileContext) (error) {
 							log.Printf ("[ii] [8198be0d]  output file interrupted by signal:  `%s`!  flushing...\n", _signal)
 						}
 						if _error := outputFileClose (_context, false); _error != nil {
-							logError (_error, "[7017a4da]  output file failed flushing;  ignoring!")
+							logError (_error, "[7017a4da]  output file failed to flush;  ignoring!")
 						}
 					
 					default :
@@ -1239,7 +1464,7 @@ func outputFileLooper (_context *OutputFileContext) (error) {
 			case <- _ticker.C :
 				outputFileTimestamp (_context)
 				if _error := outputFileClosePerhaps (_context); _error != nil {
-					logError (_error, "[9bc52216]  output file failed flushing;  ignoring!")
+					logError (_error, "[9bc52216]  output file failed to flush;  ignoring!")
 				}
 		}
 	}
@@ -1335,28 +1560,28 @@ func outputFileOpen (_context *OutputFileContext) (error) {
 		)
 	
 	if _error := os.MkdirAll (path.Dir (_context.currentCurrentPath), _configuration.StoreMode); _error != nil {
-		log.Printf ("[ee] [9e694a9c]  failed opening current output file to `%s` (mkdir);  ignoring!\n", _context.currentCurrentPath)
+		log.Printf ("[ee] [9e694a9c]  output file failed opening current `%s` (mkdir);  ignoring!\n", _context.currentCurrentPath)
 		logError (_error, "")
 	}
 	if _file, _error := os.OpenFile (_context.currentCurrentPath, os.O_CREATE | os.O_EXCL | os.O_WRONLY | os.O_APPEND, _configuration.FileMode); _error == nil {
 		if _configuration.Debug {
-			log.Printf ("[ii] [27432827]  succeeded opening current output file `%s`;\n", _context.currentCurrentPath)
+			log.Printf ("[ii] [27432827]  output file succeeded opening current `%s`;\n", _context.currentCurrentPath)
 		}
 		_context.currentFile = _file
 	} else {
-		log.Printf ("[ee] [27432827]  failed opening current output file `%s` (open);  ignoring!\n", _context.currentCurrentPath)
+		log.Printf ("[ee] [27432827]  output file failed opening current `%s` (open);  ignoring!\n", _context.currentCurrentPath)
 		logError (_error, "")
 		_context.currentFile = nil
 	}
 	
 	if _configuration.CurrentSymlinkPath != "" {
 		if _error := os.Remove (_configuration.CurrentSymlinkPath); (_error != nil) && ! os.IsNotExist (_error) {
-			logError (_error, "[fb4f5f7b]  failed symlink-ing current output file (unlink);  ignoring!")
+			logError (_error, "[fb4f5f7b]  output file failed symlink-ing current (unlink);  ignoring!")
 		}
 		if _relativePath, _error := filepath.Rel (path.Dir (_configuration.CurrentSymlinkPath), _context.currentCurrentPath); _error != nil {
-			logError (_error, "[a578ba45]  failed symlink-ing current output file (relpath);  ignoring!")
+			logError (_error, "[a578ba45]  output file failed symlink-ing current (relpath);  ignoring!")
 		} else if _error := os.Symlink (_relativePath, _configuration.CurrentSymlinkPath); _error != nil {
-			logError (_error, "[f0ccc0b5]  failed symlink-ing current output file (relpath);  ignoring!")
+			logError (_error, "[f0ccc0b5]  output file failed symlink-ing current (relpath);  ignoring!")
 		}
 	}
 	
@@ -1378,19 +1603,19 @@ func outputFileClosePerhaps (_context *OutputFileContext) (error) {
 	_shouldClose := false
 	if ! _shouldClose && (_context.currentMessages >= _configuration.Messages) {
 		if _configuration.Debug {
-			log.Printf ("[ii] [6608f486]  output file has reached its maximum messages count limit;\n")
+			log.Printf ("[ii] [6608f486]  output file reached maximum messages count limit;\n")
 		}
 		_shouldClose = true
 	}
 	if ! _shouldClose && (_context.nowTimestamp.Sub (_context.currentTimestamp) >= _configuration.Timeout) {
 		if _configuration.Debug {
-			log.Printf ("[ii] [963bf22e]  output file has reached its maximum age limit;\n")
+			log.Printf ("[ii] [963bf22e]  output file reached maximum file age limit;\n")
 		}
 		_shouldClose = true
 	}
 	if ! _shouldClose && (_context.currentTimestampToken != _context.nowTimestampToken) {
 		if _configuration.Debug {
-			log.Printf ("[ii] [214f5ea7]  output file has a different timestamp token;\n")
+			log.Printf ("[ii] [214f5ea7]  output file changed timestamp token;\n")
 		}
 		_shouldClose = true
 	}
@@ -1416,39 +1641,39 @@ func outputFileClose (_context *OutputFileContext, _wait bool) (error) {
 	
 	if _error := _context.currentFile.Close (); _error == nil {
 		if _configuration.Debug {
-			log.Printf ("[ii] [c1b80cc7]  succeeded closing previous output file `%s`;\n", _context.currentCurrentPath)
+			log.Printf ("[ii] [c1b80cc7]  output file succeeded closing previous `%s`;\n", _context.currentCurrentPath)
 		}
 	} else {
-		log.Printf ("[ee] [c1b80cc7]  failed closing previous output file `%s`;  ignoring!\n", _context.currentCurrentPath)
+		log.Printf ("[ee] [c1b80cc7]  output file failed closing previous `%s`;  ignoring!\n", _context.currentCurrentPath)
 		logError (_error, "")
 	}
 	
 	if _error := os.Remove (_configuration.CurrentSymlinkPath); (_error != nil) && ! os.IsNotExist (_error) {
-		logError (_error, "[5df85030]  failed symlink-ing current output file (unlink);  ignoring!")
+		logError (_error, "[5df85030]  output file failed symlink-ing current (unlink);  ignoring!")
 	}
 	
 	if _context.currentCurrentPath != _context.currentArchivedPath {
 		if _error := os.MkdirAll (path.Dir (_context.currentArchivedPath), _configuration.StoreMode); _error != nil {
-			log.Printf ("[ee] [0febdcf9]  failed renaming previous output file to `%s` (mkdir);  ignoring!\n", _context.currentArchivedPath)
+			log.Printf ("[ee] [0febdcf9]  output file failed renaming previous `%s` (mkdir);  ignoring!\n", _context.currentArchivedPath)
 			logError (_error, "")
 		}
 		if _error := os.Rename (_context.currentCurrentPath, _context.currentArchivedPath); _error == nil {
 			if _configuration.Debug {
-				log.Printf ("[ii] [04157e71]  succeeded renaming previous output file to `%s`;\n", _context.currentArchivedPath)
+				log.Printf ("[ii] [04157e71]  output file succeeded renaming previous `%s`;\n", _context.currentArchivedPath)
 			}
 		} else {
-			log.Printf ("[ee] [7ad610e7]  failed renaming previous output file to `%s` (rename);  ignoring!\n", _context.currentArchivedPath)
+			log.Printf ("[ee] [7ad610e7]  output file failed renaming previous `%s` (rename);  ignoring!\n", _context.currentArchivedPath)
 			logError (_error, "")
 		}
 	}
 	
 	if _configuration.ArchivedCompressSuffix != "" {
 		if _error := outputFileCompress (_context, _wait); _error != nil {
-			log.Printf ("[ee] [9e80c303]  failed compressing previous output file to `%s` (rename);  ignoring!\n", _context.currentArchivedPath)
+			log.Printf ("[ee] [9e80c303]  output file failed compressing previous `%s` (rename);  ignoring!\n", _context.currentArchivedPath)
 			logError (_error, "")
 		}
 	} else {
-		log.Printf ("[ii] [c59ca93f]  succeeded archiving output file `%s`;\n", _context.currentArchivedPath)
+		log.Printf ("[ii] [c59ca93f]  output file succeeded archiving previous `%s`;\n", _context.currentArchivedPath)
 	}
 	
 	_context.currentFile = nil
@@ -1470,7 +1695,7 @@ func outputFileCompress (_context *OutputFileContext, _wait bool) (error) {
 	_compressedPathTemp := _uncompressedPath + _configuration.ArchivedCompressSuffix + ".tmp"
 	
 	if _configuration.Debug {
-		log.Printf ("[ii] [2d5bbfb2]  compressing previous output file to `%s`...\n", _compressedPathFinal)
+		log.Printf ("[ii] [2d5bbfb2]  output file compressing previous `%s`...\n", _compressedPathFinal)
 	}
 	
 	var _uncompressedFile *os.File
@@ -1481,12 +1706,13 @@ func outputFileCompress (_context *OutputFileContext, _wait bool) (error) {
 	_exitGroup.Add (1)
 	
 	_abort := func () (error) {
+		os.Remove (_compressedPathFinal)
+		os.Remove (_compressedPathTemp)
 		if _uncompressedFile != nil {
 			_uncompressedFile.Close ()
 		}
 		if _compressedFile != nil {
 			_compressedFile.Close ()
-			os.Remove (_compressedPathTemp)
 		}
 		if _process != nil {
 			_process.Kill ()
@@ -1499,24 +1725,29 @@ func outputFileCompress (_context *OutputFileContext, _wait bool) (error) {
 	if _file, _error := os.OpenFile (_uncompressedPath, os.O_RDONLY, _configuration.FileMode); _error == nil {
 		_uncompressedFile = _file
 	} else {
-		logError (_error, "[6a38d1df]  failed opening uncompressed file!")
+		logError (_error, "[6a38d1df]  output file failed opening previous uncompressed!")
 		return _abort ()
 	}
 	
 	if _file, _error := os.OpenFile (_compressedPathTemp, os.O_CREATE | os.O_EXCL | os.O_WRONLY | os.O_APPEND, _configuration.FileMode); _error == nil {
 		_compressedFile = _file
 	} else {
-		logError (_error, "[36b2959a]  failed opening compressed file!")
+		logError (_error, "[36b2959a]  output file failed creating previous compressed!")
 		return _abort ()
+	}
+	
+	if _configuration.Debug {
+		log.Printf ("[ii] [45c0de44]  output file compress process starting: `%q`...\n", _configuration.ArchivedCompressCommand)
 	}
 	
 	_command := exec.Command (_configuration.ArchivedCompressCommand[0], _configuration.ArchivedCompressCommand[1:] ...)
 	_command.Stdin = _uncompressedFile
 	_command.Stdout = _compressedFile
+	_command.Stderr = os.Stderr
 	if _error := _command.Start (); _error == nil {
 		_process = _command.Process
 	} else {
-		logError (_error, "[d591be92]  failed executing compress process (exec)!")
+		logError (_error, "[d591be92]  output file failed executing compress process (exec)!")
 		return _abort ()
 	}
 	
@@ -1529,30 +1760,30 @@ func outputFileCompress (_context *OutputFileContext, _wait bool) (error) {
 		
 		if _state, _error := _process.Wait (); _error == nil {
 			if ! _state.Success () {
-				log.Printf ("[ee] [09463fb9]  failed executing compress process (exit):  `%s`!\n", _state.Sys ())
+				log.Printf ("[ee] [09463fb9]  output file failed executing compress process (exit):  `%s`!\n", _state.Sys ())
 				_process = nil
 				return _abort ()
 			}
 		} else {
-			logError (_error, "[30dd81af]  failed executing compress process (wait)!")
+			logError (_error, "[30dd81af]  output file failed executing compress process (wait)!")
 			_process = nil
 			return _abort ()
 		}
 		
 		if _error := os.Rename (_compressedPathTemp, _compressedPathFinal); _error != nil {
-			logError (_error, "[dd8ff061]  failed renaming compressed file!")
+			logError (_error, "[dd8ff061]  output file failed renaming previous compressed!")
 			return _abort ()
 		}
 		if _error := os.Remove (_uncompressedPath); _error != nil {
-			logError (_error, "[9391f70d]  failed deleting uncompressed file!")
+			logError (_error, "[9391f70d]  output file failed deleting previous uncompressed!")
 			return _abort ()
 		}
 		
 		if _configuration.Debug {
-			log.Printf ("[ii] [9b4015d2]  succeeded compressing previous output file to `%s`;\n", _compressedPathFinal)
+			log.Printf ("[ii] [9b4015d2]  output file succeeded compressing previous `%s`;\n", _compressedPathFinal)
 		}
 		
-		log.Printf ("[ii] [07a39e08]  succeeded archiving output file `%s`;\n", _compressedPathFinal)
+		log.Printf ("[ii] [07a39e08]  output file succeeded archiving previous `%s`;\n", _compressedPathFinal)
 		
 		_exitGroup.Done ()
 		
