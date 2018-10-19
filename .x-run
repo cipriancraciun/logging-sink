@@ -39,7 +39,9 @@
 	exec -- ./.outputs/main \
 			--input-syslog-listen-udp 127.35.195.99:8514 \
 			--input-syslog-format rfc5424 \
-			--output-stdout-json-pretty=false \
+			--output-stdout-json-pretty=true \
+			--parser-message-json=true \
+			--parser-message-raw=false \
 			--report-timeout 6s \
 		#
 	exit -- 1
@@ -59,6 +61,8 @@
 			--output-file-json-pretty=false \
 			--output-file-messages 32 \
 			--output-file-timeout 6s \
+			--parser-message-json=true \
+			--parser-message-raw=true \
 			--report-timeout 6s \
 		#
 	exit -- 1

@@ -3,7 +3,10 @@
 package main
 
 
+import "bufio"
 import "crypto/rand"
+import "crypto/sha256"
+import "encoding/hex"
 import "encoding/json"
 import "flag"
 import "fmt"
@@ -66,6 +69,8 @@ const DefaultOutputFileDebug = false
 const DefaultOutputBufferSize = 16 * 1024
 
 const DefaultParserMessageJson = true
+const DefaultParserMessageRaw = true
+const DefaultParserMessageSha256 = true
 const DefaultParserDebug = false
 
 const DefaultDequeueTickerInterval = 6 * time.Second
@@ -84,12 +89,14 @@ type Message struct {
 	Sequence uint64 `json:"sequence"`
 	Timestamp time.Time `json:"timestamp"`
 	TimestampRaw uint64 `json:"timestamp_unix"`
+	Application string `json:"application,omitempty"`
 	Level string `json:"level"`
 	LevelRaw int8 `json:"level_unix"`
-	Application string `json:"application,omitempty"`
+	Syslog map[string]interface{} `json:"syslog,omitempty"`
+	MessageRaw []byte `json:"message_raw,omitempty"`
+	MessageSha256 string `json:"message_sha256,omitempty"`
 	MessageText string `json:"message_text,omitempty"`
 	MessageJson json.RawMessage `json:"message_json,omitempty"`
-	Syslog map[string]interface{} `json:"syslog,omitempty"`
 }
 
 
@@ -222,6 +229,8 @@ type DequeueContext struct {
 type ParserConfiguration struct {
 	
 	MessageJson bool
+	MessageRaw bool
+	MessageSha256 bool
 	Debug bool
 }
 
@@ -290,6 +299,8 @@ func configure (_arguments []string) (*Configuration, error) {
 	_dequeueReportCounter := _flags.Uint ("report-messages", DefaultDequeueReportCounter, "<count>")
 	
 	_parserMessageJson := _flags.Bool ("parser-message-json", DefaultParserMessageJson, "true (*) | false")
+	_parserMessageRaw := _flags.Bool ("parser-message-raw", DefaultParserMessageRaw, "true (*) | false")
+	_parserMessageSha256 := _flags.Bool ("parser-message-sha256", DefaultParserMessageSha256, "true (*) | false")
 	_parserDebug := _flags.Bool ("parser-debug", DefaultParserDebug, "true | false (*)")
 	
 	_forcedDebug := _flags.Bool ("debug", false, "true | false (*)")
@@ -449,6 +460,8 @@ func configure (_arguments []string) (*Configuration, error) {
 	
 	_parserConfiguration := & ParserConfiguration {
 			MessageJson : *_parserMessageJson,
+			MessageRaw : *_parserMessageRaw,
+			MessageSha256 : *_parserMessageSha256,
 			Debug : *_parserDebug || *_forcedDebug,
 		}
 	_globalDebug = _globalDebug || _parserConfiguration.Debug
@@ -479,7 +492,11 @@ func inputSyslogInitialize (_configuration *InputSyslogConfiguration, _syslogQue
 	if _configuration.Debug {
 		log.Printf ("[ii] [fe61c4fc]  input syslog using protocol `%s`;\n", _configuration.FormatName)
 	}
-	_server.SetFormat (_configuration.FormatParser)
+	
+	_serverFormat := & InputSyslogFormat {
+			delegate : _configuration.FormatParser,
+		}
+	_server.SetFormat (_serverFormat)
 	
 	_listening := false
 	if _configuration.ListenTcp != "" {
@@ -610,6 +627,51 @@ func inputSyslogLooper (_context *InputSyslogContext) (error) {
 	
 	log.Printf ("[ii] [50f377f5]  input syslog terminated;\n")
 	return nil
+}
+
+
+type InputSyslogFormat struct {
+	delegate syslog_format.Format
+}
+
+func (format *InputSyslogFormat) GetParser (_message []byte) (syslog_format.LogParser) {
+	_sha256Raw := sha256.Sum256 (_message)
+	_sha256Hex := hex.EncodeToString (_sha256Raw[:])
+	return & InputSyslogParser {
+			delegate : format.delegate.GetParser (_message),
+			messageRaw : _message,
+			messageSha256 : _sha256Hex,
+		}
+}
+
+func (format *InputSyslogFormat) GetSplitFunc () (bufio.SplitFunc) {
+	return format.delegate.GetSplitFunc ()
+}
+
+
+type InputSyslogParser struct {
+	delegate syslog_format.LogParser
+	messageRaw []byte
+	messageSha256 string
+}
+
+func (parser *InputSyslogParser) Parse () (error) {
+	return parser.delegate.Parse ()
+}
+
+func (parser *InputSyslogParser) Location (_location *time.Location) () {
+	parser.delegate.Location (_location)
+}
+
+func (parser *InputSyslogParser) Dump () (syslog_format.LogParts) {
+	_message := parser.delegate.Dump ()
+	if parser.messageRaw != nil {
+		_message["_message_raw"] = parser.messageRaw
+	}
+	if parser.messageSha256 != "" {
+		_message["_message_sha256"] = parser.messageSha256
+	}
+	return _message
 }
 
 
@@ -910,6 +972,40 @@ func parserProcess (_context *ParserContext, _syslogMessage syslog_format.LogPar
 		_levelText = "<unknown>"
 	}
 	
+	var _messageRaw []byte
+	if _messageRaw_0, _messageRawExists := _syslogMessage["_message_raw"]; _messageRawExists {
+		if _messageRaw_0, _messageRawIsString := _messageRaw_0.([]byte); _messageRawIsString {
+			_messageRaw = _messageRaw_0
+		} else {
+			log.Printf ("[ee] [fbf8ef52]  syslog message #%d is missing `_message_raw` (attribute is not a buffer);  ignoring!\n", _sequence)
+			_messageRaw = nil
+		}
+		delete (_syslogMessage, "_message_raw")
+	} else {
+		log.Printf ("[ee] [442c9f2d]  syslog message #%d is missing `_message_raw` (attribute does not exist);  ignoring!\n", _sequence)
+		_messageRaw = nil
+	}
+	if ! _configuration.MessageRaw {
+		_messageRaw = nil
+	}
+	
+	var _messageSha256 string
+	if _messageSha256_0, _messageSha256Exists := _syslogMessage["_message_sha256"]; _messageSha256Exists {
+		if _messageSha256_0, _messageSha256IsString := _messageSha256_0.(string); _messageSha256IsString {
+			_messageSha256 = _messageSha256_0
+		} else {
+			log.Printf ("[ee] [4b730aaa]  syslog message #%d is missing `_message_sha256` (attribute is not a string);  ignoring!\n", _sequence)
+			_messageSha256 = ""
+		}
+		delete (_syslogMessage, "_message_sha256")
+	} else {
+		log.Printf ("[ee] [8898fe78]  syslog message #%d is missing `_message_sha256` (attribute does not exist);  ignoring!\n", _sequence)
+		_messageSha256 = ""
+	}
+	if ! _configuration.MessageSha256 {
+		_messageSha256 = ""
+	}
+	
 	_messageText = strings.TrimSpace (_messageText)
 	
 	var _messageJson json.RawMessage = nil
@@ -930,6 +1026,8 @@ func parserProcess (_context *ParserContext, _syslogMessage syslog_format.LogPar
 			Application : _application,
 			MessageText : _messageText,
 			MessageJson : _messageJson,
+			MessageRaw : _messageRaw,
+			MessageSha256 : _messageSha256,
 			Syslog : _syslogMessage,
 		}
 	
