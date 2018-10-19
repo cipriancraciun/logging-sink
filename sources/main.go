@@ -925,8 +925,10 @@ func parserInitialize (_configuration *ParserConfiguration) (*ParserContext, err
 			initialized : true,
 		}
 	
-	if _error := parserExternalCommandStart (_context); _error != nil {
-		return nil, _error
+	if _configuration.ExternalCommand != nil {
+		if _error := parserExternalCommandStart (_context); _error != nil {
+			return nil, _error
+		}
 	}
 	
 	return _context, nil
@@ -939,7 +941,12 @@ func parserFinalize (_context *ParserContext) (error) {
 		return nil
 	}
 	
-	_error := parserExternalCommandStop (_context)
+	_configuration := _context.configuration
+	
+	var _error error = nil
+	if _configuration.ExternalCommand != nil {
+		_error = parserExternalCommandStop (_context)
+	}
 	
 	_context.initialized = false
 	
@@ -1078,10 +1085,12 @@ func parserProcess (_context *ParserContext, _syslogMessage syslog_format.LogPar
 			Syslog : _syslogMessage,
 		}
 	
-	if _messageReplacement, _error := parserExternalCommandProcess (_context, _message); _error == nil {
-		_message = _messageReplacement
-	} else {
-		logError (_error, "[ee] [5359422a]  parser external command failed to process message;  ignoring!")
+	if _configuration.ExternalCommand != nil {
+		if _messageReplacement, _error := parserExternalCommandProcess (_context, _message); _error == nil {
+			_message = _messageReplacement
+		} else {
+			logError (_error, "[ee] [5359422a]  parser external command failed to process message;  ignoring!")
+		}
 	}
 	
 	if _message != nil {
