@@ -30,6 +30,7 @@ import syslog_format "gopkg.in/mcuadros/go-syslog.v2/format"
 
 
 const DefaultInputSyslogEnabled = false
+const DefaultInputSyslogIdentifier = "syslog"
 const DefaultInputSyslogListenTcp = ""
 const DefaultInputSyslogTimeoutTcp = 360
 const DefaultInputSyslogListenUdp = ""
@@ -89,25 +90,62 @@ const DefaultGlobalDebug = false
 
 type Message struct {
 	
+	Schema string `json:"schema"`
+	SubSchema string `json:"subschema,omitempty"`
+	
 	Sequence uint64 `json:"sequence"`
 	Timestamp time.Time `json:"timestamp"`
-	TimestampRaw uint64 `json:"timestamp_unix"`
-	Application string `json:"application,omitempty"`
-	Level string `json:"level"`
-	LevelRaw int8 `json:"level_unix"`
-	Syslog map[string]interface{} `json:"syslog,omitempty"`
+	TimestampUnix uint64 `json:"timestamp_unix"`
+	Collector string `json:"collector,omitempty"`
+	
 	MessageRaw []byte `json:"message_raw,omitempty"`
 	MessageSha256 string `json:"message_sha256,omitempty"`
 	MessageText string `json:"message_text,omitempty"`
 	MessageJson json.RawMessage `json:"message_json,omitempty"`
 	MessageExtra json.RawMessage `json:"message_extra,omitempty"`
+	MessageMetaData interface{} `json:"message_metadata,omitempty"`
 }
+
+const MessageSchema = "20181020a"
+
+
+type CollectorMessage struct {
+	
+	Collector string
+	
+	MessageRaw []byte
+	MessageSha256 string
+	MessageText string
+	MessageMetaData interface{}
+}
+
+
+type SyslogMessageMetaData struct {
+	
+	Schema string `json:"schema,omitempty"`
+	Protocol string `json:"protocol,omitempty"`
+	
+	Timestamp time.Time `json:"timestamp"`
+	TimestampUnix uint64 `json:"timestamp_unix"`
+	
+	Node string `json:"node,omitempty"`
+	Service string `json:"service,omitempty"`
+	Type string `json:"type,omitempty"`
+	
+	Level string `json:"level,omitempty"`
+	LevelUnix int8 `json:"level_unix,omitempty"`
+	
+	Fields map[string]interface{} `json:"fields"`
+}
+
+const SyslogMessageMetaDataSchema = "syslog:20181020a"
 
 
 
 
 type InputSyslogConfiguration struct {
 	
+	Identifier string
 	ListenTcp string
 	TimeoutTcp uint
 	ListenUdp string
@@ -125,7 +163,7 @@ type InputSyslogContext struct {
 	
 	server *syslog.Server
 	
-	syslogQueue chan<- syslog_format.LogParts
+	messagesQueue chan<- *CollectorMessage
 	signalsQueue <-chan os.Signal
 	exitGroup *sync.WaitGroup
 }
@@ -222,7 +260,7 @@ type DequeueContext struct {
 	sequence uint64
 	dropped uint64
 	
-	syslogQueue <-chan syslog_format.LogParts
+	inboundQueue <-chan *CollectorMessage
 	outboundQueues [] chan<- *Message
 	signalsQueue <-chan os.Signal
 	exitGroup *sync.WaitGroup
@@ -276,6 +314,7 @@ func configure (_arguments []string) (*Configuration, error) {
 	_flags := flag.NewFlagSet ("haproxy-logger", flag.ContinueOnError)
 	
 	_inputSyslogEnabled := _flags.Bool ("input-syslog", DefaultInputSyslogEnabled, "true (*) | false")
+	_inputSyslogIdentifier := _flags.String ("input-syslog-identifier", DefaultInputSyslogIdentifier, "<identifier>")
 	_inputSyslogListenTcp := _flags.String ("input-syslog-listen-tcp", DefaultInputSyslogListenTcp, "<ip>:<port>")
 	_inputSyslogListenUdp := _flags.String ("input-syslog-listen-udp", DefaultInputSyslogListenUdp, "<ip>:<port>")
 	_inputSyslogListenUnix := _flags.String ("input-syslog-listen-unix", DefaultInputSyslogListenUnix, "<path>")
@@ -350,6 +389,7 @@ func configure (_arguments []string) (*Configuration, error) {
 				return nil, fmt.Errorf ("[a87e7a5f]  invalid `input-syslog-format` value:  `%s`!", *_inputSyslogFormatName)
 		}
 		_inputSyslogConfiguration = & InputSyslogConfiguration {
+				Identifier : *_inputSyslogIdentifier,
 				ListenTcp : *_inputSyslogListenTcp,
 				TimeoutTcp : DefaultInputSyslogTimeoutTcp,
 				ListenUdp : *_inputSyslogListenUdp,
@@ -519,11 +559,10 @@ func configure (_arguments []string) (*Configuration, error) {
 
 
 
-func inputSyslogInitialize (_configuration *InputSyslogConfiguration, _syslogQueue chan<- syslog_format.LogParts, _signalsQueue <-chan os.Signal, _exitGroup *sync.WaitGroup) (*InputSyslogContext, error) {
+func inputSyslogInitialize (_configuration *InputSyslogConfiguration, _messagesQueue chan<- *CollectorMessage, _signalsQueue <-chan os.Signal, _exitGroup *sync.WaitGroup) (*InputSyslogContext, error) {
 	
 	_server := syslog.NewServer ()
 	
-	_server.SetHandler (InputSyslogHandler (_syslogQueue))
 	_server.SetTimeout (int64 (_configuration.TimeoutTcp) * 1000)
 	
 	if _configuration.Debug {
@@ -576,18 +615,20 @@ func inputSyslogInitialize (_configuration *InputSyslogConfiguration, _syslogQue
 		log.Printf ("[ii] [f143c879]  input syslog starting...\n")
 	}
 	
-	if _error := _server.Boot (); _error != nil {
-		return nil, _error
-	}
-	
 	_context := & InputSyslogContext {
 			configuration : _configuration,
 			initialized : true,
 			server : _server,
-			syslogQueue : _syslogQueue,
+			messagesQueue : _messagesQueue,
 			signalsQueue : _signalsQueue,
 			exitGroup : _exitGroup,
 		}
+	
+	_server.SetHandler ((*InputSyslogHandler) (_context))
+	
+	if _error := _server.Boot (); _error != nil {
+		return nil, _error
+	}
 	
 	_exitGroup.Add (1)
 	
@@ -611,7 +652,7 @@ func inputSyslogFinalize (_context *InputSyslogContext) (error) {
 	_exitGroup := _context.exitGroup
 	
 	_context.server = nil
-	_context.syslogQueue = nil
+	_context.messagesQueue = nil
 	_context.signalsQueue = nil
 	_context.exitGroup = nil
 	_context.initialized = false
@@ -667,6 +708,8 @@ func inputSyslogLooper (_context *InputSyslogContext) (error) {
 }
 
 
+
+
 type InputSyslogFormat struct {
 	delegate syslog_format.Format
 }
@@ -712,11 +755,14 @@ func (parser *InputSyslogParser) Dump () (syslog_format.LogParts) {
 }
 
 
-type InputSyslogHandler chan<- syslog_format.LogParts
+type InputSyslogHandler InputSyslogContext
 
-func (_syslogQueue InputSyslogHandler) Handle (_message syslog_format.LogParts, _ int64, _error error) () {
+func (_context_0 *InputSyslogHandler) Handle (_message syslog_format.LogParts, _ int64, _error error) () {
+	_context := (*InputSyslogContext) (_context_0)
 	if _error == nil {
-		_syslogQueue <- _message
+		if _error := inputSyslogProcess (_context, _message); _error != nil {
+			logError (_error, "[eca965a0]  input syslog failed to process message;  ignoring!")
+		}
 	} else {
 		logError (_error, "[258484e5]  input syslog failed to parse message;  ignoring!")
 	}
@@ -724,14 +770,225 @@ func (_syslogQueue InputSyslogHandler) Handle (_message syslog_format.LogParts, 
 
 
 
+func inputSyslogProcess (_context *InputSyslogContext, _syslogMessage syslog_format.LogParts) (error) {
+	
+	_configuration := _context.configuration
+	
+	for _key, _value := range _syslogMessage {
+		_shouldDelete := false
+		switch _value {
+			case "" :
+				_shouldDelete = true
+			case nil :
+				_shouldDelete = true
+		}
+		if _shouldDelete {
+			delete (_syslogMessage, _key)
+		}
+	}
+	
+	var _messageText string
+	if _value, _error := syslogPartExtractAsString (_syslogMessage, []string {"message", "content"}, true, false); _error == nil {
+		_messageText = _value
+	} else {
+		return _error
+	}
+	
+	var _timestamp time.Time
+	if _value, _error := syslogPartExtractAsTime (_syslogMessage, []string {"timestamp"}, true, false); _error == nil {
+		_timestamp = _value
+	} else {
+		return _error
+	}
+	
+	var _node string
+	if _value, _error := syslogPartExtractAsString (_syslogMessage, []string {"hostname"}, true, false); _error == nil {
+		_node = _value
+	} else {
+		return _error
+	}
+	
+	var _service string
+	if _value, _error := syslogPartExtractAsString (_syslogMessage, []string {"app_name", "tag"}, true, false); _error == nil {
+		_service = _value
+	} else {
+		return _error
+	}
+	
+	var _type string
+	if _value, _error := syslogPartExtractAsString (_syslogMessage, []string {"msg_id"}, true, true); _error == nil {
+		if _value != "-" {
+			_type = _value
+		}
+	} else {
+		return _error
+	}
+	
+	var _severity int
+	if _value, _error := syslogPartExtractAsInt (_syslogMessage, []string {"severity"}, false, false); _error == nil {
+		_severity = _value
+	}
+	var _levelUnix int8
+	var _levelText string
+	switch _severity {
+		case 0 :
+			_levelUnix = 1
+			_levelText = "emergency"
+		case 1 :
+			_levelUnix = 2
+			_levelText = "alert"
+		case 2 :
+			_levelUnix = 3
+			_levelText = "critical"
+		case 3 :
+			_levelUnix = 4
+			_levelText = "error"
+		case 4 :
+			_levelUnix = 5
+			_levelText = "warning"
+		case 5 :
+			_levelUnix = 6
+			_levelText = "notice"
+		case 6 :
+			_levelUnix = 7
+			_levelText = "informative"
+		case 7 :
+			_levelUnix = 8
+			_levelText = "debug"
+		default :
+			log.Printf ("[ee] [a11d7539]  syslog message has an invalid severity `%d`;  ignoring!\n", _severity)
+			_levelUnix = -1
+			_levelText = "<undefined>"
+	}
+	
+	var _messageRaw []byte
+	if _value, _error := syslogPartExtractAsBytes (_syslogMessage, []string {"_message_raw"}, true, false); _error == nil {
+		_messageRaw = _value
+	} else {
+		return _error
+	}
+	
+	var _messageSha256 string
+	if _value, _error := syslogPartExtractAsString (_syslogMessage, []string {"_message_sha256"}, true, false); _error == nil {
+		_messageSha256 = _value
+	} else {
+		return _error
+	}
+	
+	_collectorMessage := & CollectorMessage {
+			Collector : _configuration.Identifier,
+			MessageRaw : _messageRaw,
+			MessageSha256 : _messageSha256,
+			MessageText : _messageText,
+			MessageMetaData : & SyslogMessageMetaData {
+					Schema : SyslogMessageMetaDataSchema,
+					Protocol : _configuration.FormatName,
+					Timestamp : _timestamp,
+					TimestampUnix : uint64 (_timestamp.UnixNano () / 1000000),
+					Node : _node,
+					Service : _service,
+					Type : _type,
+					Level : _levelText,
+					LevelUnix : _levelUnix,
+					Fields : _syslogMessage,
+				},
+		}
+	
+	_context.messagesQueue <- _collectorMessage
+	
+	return nil
+}
 
-func dequeueInitialize (_configuration *DequeueConfiguration, _parser *ParserContext, _syslogQueue <-chan syslog_format.LogParts, _outboundQueues [] chan<- *Message, _signalsQueue <-chan os.Signal, _exitGroup *sync.WaitGroup) (*DequeueContext, error) {
+func syslogPartExtract (_message syslog_format.LogParts, _keys []string, _delete bool, _ignore bool) (interface{}, error) {
+	for _, _key := range _keys {
+		if _value, _exists := _message[_key]; _exists {
+			if _delete {
+				delete (_message, _key)
+			}
+			return _value, nil
+		}
+	}
+	if _ignore {
+		return nil, nil
+	} else {
+		return nil, fmt.Errorf ("[3177e6e2]  syslog message is missing part with key `%q`", _keys)
+	}
+}
+
+func syslogPartExtractAsString (_message syslog_format.LogParts, _keys []string, _delete bool, _ignore bool) (string, error) {
+	if _value, _error := syslogPartExtract (_message, _keys, _delete, _ignore); _error == nil {
+		if _value != nil {
+			if _value, _isValid := _value.(string); _isValid {
+				return _value, nil
+			} else {
+				return "", fmt.Errorf ("[00e3014d]  syslog message has invalid part with key `%q`:  `%#v`", _keys, _value)
+			}
+		} else {
+			return "", nil
+		}
+	} else {
+		return "", _error
+	}
+}
+
+func syslogPartExtractAsBytes (_message syslog_format.LogParts, _keys []string, _delete bool, _ignore bool) ([]byte, error) {
+	if _value, _error := syslogPartExtract (_message, _keys, _delete, _ignore); _error == nil {
+		if _value != nil {
+			if _value, _isValid := _value.([]byte); _isValid {
+				return _value, nil
+			} else {
+				return nil, fmt.Errorf ("[9f0ac23f]  syslog message has invalid part with key `%q`:  `%#v`", _keys, _value)
+			}
+		} else {
+			return nil, nil
+		}
+	} else {
+		return nil, _error
+	}
+}
+
+func syslogPartExtractAsInt (_message syslog_format.LogParts, _keys []string, _delete bool, _ignore bool) (int, error) {
+	if _value, _error := syslogPartExtract (_message, _keys, _delete, _ignore); _error == nil {
+		if _value != nil {
+			if _value, _isValid := _value.(int); _isValid {
+				return _value, nil
+			} else {
+				return 0, fmt.Errorf ("[3507b378]  syslog message has invalid part with key `%q`:  `%#v`", _keys, _value)
+			}
+		} else {
+			return 0, nil
+		}
+	} else {
+		return 0, _error
+	}
+}
+
+func syslogPartExtractAsTime (_message syslog_format.LogParts, _keys []string, _delete bool, _ignore bool) (time.Time, error) {
+	if _value, _error := syslogPartExtract (_message, _keys, _delete, _ignore); _error == nil {
+		if _value != nil {
+			if _value, _isValid := _value.(time.Time); _isValid {
+				return _value, nil
+			} else {
+				return time.Time {}, fmt.Errorf ("[a9d64fc8]  syslog message has invalid part with key `%q`:  `%#v`", _keys, _value)
+			}
+		} else {
+			return time.Time {}, nil
+		}
+	} else {
+		return time.Time {}, _error
+	}
+}
+
+
+
+
+func dequeueInitialize (_configuration *DequeueConfiguration, _parser *ParserContext, _inboundQueue <-chan *CollectorMessage, _outboundQueues [] chan<- *Message, _signalsQueue <-chan os.Signal, _exitGroup *sync.WaitGroup) (*DequeueContext, error) {
 	
 	_context := & DequeueContext {
 			configuration : _configuration,
 			parser : _parser,
 			initialized : true,
-			syslogQueue : _syslogQueue,
+			inboundQueue : _inboundQueue,
 			outboundQueues : _outboundQueues,
 			signalsQueue : _signalsQueue,
 			exitGroup : _exitGroup,
@@ -758,7 +1015,7 @@ func dequeueFinalize (_context *DequeueContext) (error) {
 	_exitGroup := _context.exitGroup
 	
 	_context.initialized = false
-	_context.syslogQueue = nil
+	_context.inboundQueue = nil
 	_context.outboundQueues = nil
 	_context.signalsQueue = nil
 	_context.exitGroup = nil
@@ -793,13 +1050,13 @@ func dequeueLooper (_context *DequeueContext) (error) {
 			log.Printf ("[ii] [5cedbf0d]  dequeue waiting to receive message #%d...\n", _context.sequence + 1)
 		}
 		
-		var _message syslog_format.LogParts = nil
+		var _message *CollectorMessage = nil
 		_shouldStop := false
 		_shouldReport := false
 		
 		select {
 			
-			case _message = <- _context.syslogQueue :
+			case _message = <- _context.inboundQueue :
 				if _message == nil {
 					_shouldStop = true
 					_shouldReport = true
@@ -879,7 +1136,7 @@ func dequeueLooper (_context *DequeueContext) (error) {
 }
 
 
-func dequeueProcess (_context *DequeueContext, _syslogMessage syslog_format.LogParts) (error) {
+func dequeueProcess (_context *DequeueContext, _collectorMessage *CollectorMessage) (error) {
 	
 	if ! _context.initialized {
 		return fmt.Errorf ("[1740da8a]  dequeue is not initialized!")
@@ -888,7 +1145,7 @@ func dequeueProcess (_context *DequeueContext, _syslogMessage syslog_format.LogP
 	_configuration := _context.configuration
 	
 	var _message *Message
-	if _message_0, _error := parserProcess (_context.parser, _syslogMessage, _context.sequence); _error == nil {
+	if _message_0, _error := parserProcess (_context.parser, _collectorMessage, _context.sequence); _error == nil {
 		_message = _message_0
 	} else {
 		return _error
@@ -954,7 +1211,7 @@ func parserFinalize (_context *ParserContext) (error) {
 }
 
 
-func parserProcess (_context *ParserContext, _syslogMessage syslog_format.LogParts, _sequence uint64) (*Message, error) {
+func parserProcess (_context *ParserContext, _collectorMessage *CollectorMessage, _sequence uint64) (*Message, error) {
 	
 	if ! _context.initialized {
 		return nil, fmt.Errorf ("[6572b28d]  parser is not initialized!")
@@ -963,126 +1220,35 @@ func parserProcess (_context *ParserContext, _syslogMessage syslog_format.LogPar
 	_configuration := _context.configuration
 	
 	_timestamp := time.Now ()
-	_timestampMilliseconds := _timestamp.UnixNano () / 1000000
 	
-	var _messageText string
-	if _messageText_0, _messageExists := _syslogMessage["message"]; _messageExists {
-		if _messageText_0, _messageIsString := _messageText_0.(string); _messageIsString {
-			_messageText = _messageText_0
-		} else {
-			log.Printf ("[ee] [87d571ff]  parsing syslog message #%d is missing `message` (attribute is not a string);  ignoring!\n", _sequence)
-			_messageText = ""
-		}
-		delete (_syslogMessage, "message")
-	} else {
-		log.Printf ("[ee] [6e096811]  parsing syslog message #%d is missing `message` (attribute does not exist);  ignoring!\n", _sequence)
-		_messageText = ""
-	}
-	
-	var _application string
-	if _application_0, _applicationExists := _syslogMessage["app_name"]; _applicationExists {
-		if _application_0, _applicationIsString := _application_0.(string); _applicationIsString {
-			_application = _application_0
-		} else {
-			log.Printf ("[ee] [7cf38fac]  parsing syslog message #%d is missing `app_name` (attribute is not a string);  ignoring!\n", _sequence)
-			_application = "<unknown>"
-		}
-		delete (_syslogMessage, "app_name")
-	} else {
-		log.Printf ("[ee] [d67aba45]  parsing syslog message #%d is missing `app_name` (attribute does not exist);  ignoring!\n", _sequence)
-		_application = "<unknown>"
-	}
-	
-	var _level int8
-	var _levelText string
-	if _severity_0, _severityExists := _syslogMessage["severity"]; _severityExists {
-		switch _severity_0 {
-			case 0 :
-				_level = 0
-				_levelText = "emergency"
-			case 1 :
-				_level = 1
-				_levelText = "alert"
-			case 2 :
-				_level = 2
-				_levelText = "critical"
-			case 3 :
-				_level = 3
-				_levelText = "error"
-			case 4 :
-				_level = 4
-				_levelText = "warning"
-			case 5 :
-				_level = 5
-				_levelText = "notice"
-			case 6 :
-				_level = 6
-				_levelText = "informative"
-			case 7 :
-				_level = 7
-				_levelText = "debug"
-			default :
-				log.Printf ("[ee] [a11d7539]  parsing syslog message #%d has an invalid severity `%d`;  ignoring!\n", _sequence, _severity_0)
-				_level = -1
-				_levelText = "<undefined>"
-		}
-	} else {
-		log.Printf ("[ee] [aa9b6e25]  parsing syslog message #%d is missing `severity` (attribute does not exist);  ignoring!\n", _sequence)
-		_level = -1
-		_levelText = "<unknown>"
-	}
-	
-	var _messageRaw []byte
-	if _messageRaw_0, _messageRawExists := _syslogMessage["_message_raw"]; _messageRawExists {
-		if _messageRaw_0, _messageRawIsString := _messageRaw_0.([]byte); _messageRawIsString {
-			_messageRaw = _messageRaw_0
-		} else {
-			log.Printf ("[ee] [fbf8ef52]  parsing syslog message #%d is missing `_message_raw` (attribute is not a buffer);  ignoring!\n", _sequence)
-			_messageRaw = nil
-		}
-		delete (_syslogMessage, "_message_raw")
-	} else {
-		log.Printf ("[ee] [442c9f2d]  parsing syslog message #%d is missing `_message_raw` (attribute does not exist);  ignoring!\n", _sequence)
-		_messageRaw = nil
-	}
-	
-	var _messageSha256 string
-	if _messageSha256_0, _messageSha256Exists := _syslogMessage["_message_sha256"]; _messageSha256Exists {
-		if _messageSha256_0, _messageSha256IsString := _messageSha256_0.(string); _messageSha256IsString {
-			_messageSha256 = _messageSha256_0
-		} else {
-			log.Printf ("[ee] [4b730aaa]  parsing syslog message #%d is missing `_message_sha256` (attribute is not a string);  ignoring!\n", _sequence)
-			_messageSha256 = ""
-		}
-		delete (_syslogMessage, "_message_sha256")
-	} else {
-		log.Printf ("[ee] [8898fe78]  parsing syslog message #%d is missing `_message_sha256` (attribute does not exist);  ignoring!\n", _sequence)
-		_messageSha256 = ""
-	}
-	
-	_messageText = strings.TrimSpace (_messageText)
+	_collector := _collectorMessage.Collector
+	_messageRaw := _collectorMessage.MessageRaw
+	_messageSha256 := _collectorMessage.MessageSha256
+	_messageText := _collectorMessage.MessageText
+	_messageMetaData := _collectorMessage.MessageMetaData
 	
 	var _messageJson json.RawMessage = nil
 	if _configuration.MessageJson {
-		if strings.HasPrefix (_messageText, "{") && strings.HasSuffix (_messageText, "}") {
-			if _error := json.Unmarshal ([]byte (_messageText), &_messageJson); _error == nil {
+		_messageText_0 := strings.TrimSpace (_messageText)
+		if strings.HasPrefix (_messageText_0, "{") && strings.HasSuffix (_messageText_0, "}") {
+			if _error := json.Unmarshal ([]byte (_messageText_0), &_messageJson); _error == nil {
 				_messageText = ""
 			}
 		}
 	}
 	
 	_message := & Message {
+			Schema : MessageSchema,
+			SubSchema : "",
 			Sequence : _sequence,
 			Timestamp : _timestamp,
-			TimestampRaw : uint64 (_timestampMilliseconds),
-			Level : _levelText,
-			LevelRaw : _level,
-			Application : _application,
-			MessageText : _messageText,
-			MessageJson : _messageJson,
+			TimestampUnix : uint64 (_timestamp.UnixNano () / 1000000),
+			Collector : _collector,
 			MessageRaw : _messageRaw,
 			MessageSha256 : _messageSha256,
-			Syslog : _syslogMessage,
+			MessageText : _messageText,
+			MessageJson : _messageJson,
+			MessageMetaData : _messageMetaData,
 		}
 	
 	if _configuration.ExternalCommand != nil {
@@ -1100,7 +1266,6 @@ func parserProcess (_context *ParserContext, _syslogMessage syslog_format.LogPar
 		if ! _configuration.MessageSha256 {
 			_message.MessageSha256 = ""
 		}
-	} else {
 	}
 	
 	return _message, nil
@@ -1878,13 +2043,15 @@ func main_0 () (error) {
 	if _configuration.Debug {
 		log.Printf ("[ii] [e1603153]  initializing services...\n")
 	}
-	var _syslogQueueSize uint = DefaultInputSyslogQueueSize
-	if _configuration.InputSyslog != nil {
-		_syslogQueueSize = _configuration.InputSyslog.QueueSize
-	}
-	_syslogQueue := make (chan syslog_format.LogParts, _syslogQueueSize)
 	
-	_messagesQueues := make ([] chan<- *Message, 0)
+	var _inputQueueSize uint = DefaultInputSyslogQueueSize
+	if _configuration.InputSyslog != nil {
+		_inputQueueSize = _configuration.InputSyslog.QueueSize
+	}
+	
+	_inputQueue := make (chan *CollectorMessage, _inputQueueSize)
+	_outputQueues := make ([] chan<- *Message, 0)
+	
 	_mainSignalsQueue := make (chan os.Signal, DefaultSignalsQueueSize)
 	_serviceSignalsQueues := make ([] chan os.Signal, 0)
 	_exitGroup := & sync.WaitGroup {}
@@ -1903,7 +2070,7 @@ func main_0 () (error) {
 		_configuration := _configuration.InputSyslog
 		_signalsQueue := make (chan os.Signal, DefaultSignalsQueueSize)
 		_serviceSignalsQueues = append (_serviceSignalsQueues, _signalsQueue)
-		if _context, _error := inputSyslogInitialize (_configuration, _syslogQueue, _signalsQueue, _exitGroup); _error == nil {
+		if _context, _error := inputSyslogInitialize (_configuration, _inputQueue, _signalsQueue, _exitGroup); _error == nil {
 			_inputSyslogContext = _context
 			defer inputSyslogFinalize (_inputSyslogContext)
 		} else {
@@ -1918,11 +2085,11 @@ func main_0 () (error) {
 			log.Printf ("[ii] [cf9ea565]  initializing output stdout...\n")
 		}
 		_configuration := _configuration.OutputStdout
-		_messagesQueue := make (chan *Message, _configuration.QueueSize)
-		_messagesQueues = append (_messagesQueues, _messagesQueue)
+		_outputQueue := make (chan *Message, _configuration.QueueSize)
+		_outputQueues = append (_outputQueues, _outputQueue)
 		_signalsQueue := make (chan os.Signal, DefaultSignalsQueueSize)
 		_serviceSignalsQueues = append (_serviceSignalsQueues, _signalsQueue)
-		if _context, _error := outputStdoutInitialize (_configuration, _messagesQueue, _signalsQueue, _exitGroup); _error == nil {
+		if _context, _error := outputStdoutInitialize (_configuration, _outputQueue, _signalsQueue, _exitGroup); _error == nil {
 			_outputStdoutContext = _context
 			defer outputStdoutFinalize (_outputStdoutContext)
 		} else {
@@ -1937,11 +2104,11 @@ func main_0 () (error) {
 			log.Printf ("[ii] [41085a24]  initializing output file...\n")
 		}
 		_configuration := _configuration.OutputFile
-		_messagesQueue := make (chan *Message, _configuration.QueueSize)
-		_messagesQueues = append (_messagesQueues, _messagesQueue)
+		_outputQueue := make (chan *Message, _configuration.QueueSize)
+		_outputQueues = append (_outputQueues, _outputQueue)
 		_signalsQueue := make (chan os.Signal, DefaultSignalsQueueSize)
 		_serviceSignalsQueues = append (_serviceSignalsQueues, _signalsQueue)
-		if _context, _error := outputFileInitialize (_configuration, _messagesQueue, _signalsQueue, _exitGroup); _error == nil {
+		if _context, _error := outputFileInitialize (_configuration, _outputQueue, _signalsQueue, _exitGroup); _error == nil {
 			_outputFileContext = _context
 			defer outputFileFinalize (_outputFileContext)
 		} else {
@@ -1972,7 +2139,7 @@ func main_0 () (error) {
 		_configuration := _configuration.Dequeue
 		_signalsQueue := make (chan os.Signal, DefaultSignalsQueueSize)
 		_serviceSignalsQueues = append (_serviceSignalsQueues, _signalsQueue)
-		if _context, _error := dequeueInitialize (_configuration, _parserContext, _syslogQueue, _messagesQueues, _signalsQueue, _exitGroup); _error == nil {
+		if _context, _error := dequeueInitialize (_configuration, _parserContext, _inputQueue, _outputQueues, _signalsQueue, _exitGroup); _error == nil {
 			_dequeueContext = _context
 			defer dequeueFinalize (_dequeueContext)
 		} else {
