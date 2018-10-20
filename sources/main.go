@@ -777,7 +777,7 @@ func inputSyslogProcess (_context *InputSyslogContext, _syslogMessage syslog_for
 	for _key, _value := range _syslogMessage {
 		_shouldDelete := false
 		switch _value {
-			case "" :
+			case "", "-" :
 				_shouldDelete = true
 			case nil :
 				_shouldDelete = true
@@ -817,9 +817,7 @@ func inputSyslogProcess (_context *InputSyslogContext, _syslogMessage syslog_for
 	
 	var _type string
 	if _value, _error := syslogPartExtractAsString (_syslogMessage, []string {"msg_id"}, true, true); _error == nil {
-		if _value != "-" {
-			_type = _value
-		}
+		_type = _value
 	} else {
 		return _error
 	}
