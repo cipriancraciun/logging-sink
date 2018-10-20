@@ -34,7 +34,7 @@
 !!
 
 
-<< go / execute / main / udp + stdout-only
+<< go / execute / main / udp + stdout-only / rfc5424
 	"${X_RUN[@]}" ':: go / build / main / debug'
 	exec -- ./.outputs/main \
 			--input-syslog-listen-udp 127.35.195.99:8514 \
@@ -48,7 +48,22 @@
 	exit -- 1
 !!
 
-<< go / execute / main / udp + stdout-only + jq / replace
+<< go / execute / main / udp + stdout-only / rfc3164
+	"${X_RUN[@]}" ':: go / build / main / debug'
+	exec -- ./.outputs/main \
+			--input-syslog-listen-udp 127.35.195.99:8514 \
+			--input-syslog-format rfc3164 \
+			--output-stdout-json-pretty=true \
+			--parser-message-json=true \
+			--parser-message-raw=false \
+			--report-timeout 6s \
+			"${@}" \
+		#
+	exit -- 1
+!!
+
+
+<< go / execute / main / udp + stdout-only + jq / replace / rfc5424
 	"${X_RUN[@]}" ':: go / build / main / debug'
 	_jq_script='
 			
@@ -82,7 +97,7 @@
 	exit -- 1
 !!
 
-<< go / execute / main / udp + stdout-only + jq / augment
+<< go / execute / main / udp + stdout-only + jq / extend / rfc5424
 	"${X_RUN[@]}" ':: go / build / main / debug'
 	_jq_script='
 			
@@ -112,7 +127,7 @@
 !!
 
 
-<< go / execute / main / udp + file-only
+<< go / execute / main / udp + file-only / rfc5424
 	"${X_RUN[@]}" ':: go / build / main / debug'
 	exec -- ./.outputs/main \
 			--input-syslog-listen-udp 127.35.195.99:8514 \
@@ -130,6 +145,78 @@
 			--report-timeout 6s \
 			"${@}" \
 		#
+	exit -- 1
+!!
+
+
+
+
+<< log / text / rfc5424
+	test "${#}" -eq 0
+	exec -- logger \
+			--udp --server=127.35.195.99 --port=8514 --size=65535 \
+			--rfc5424 \
+			--tag="test" --msgid="text" --id=959317 \
+			--stderr \
+		< <(
+			while true ; do
+				printf '[~~]  message:  %s %s %s %s!\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+				sleep -- 1s
+			done
+		) \
+	#
+	exit -- 1
+!!
+
+<< log / text / rfc3164
+	test "${#}" -eq 0
+	exec -- logger \
+			--udp --server=127.35.195.99 --port=8514 --size=65535 \
+			--rfc3164 \
+			--tag="test" --msgid="text" --id=959317 \
+			--stderr \
+		< <(
+			while true ; do
+				printf '[~~]  message:  %s %s %s %s!\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+				sleep -- 1s
+			done
+		) \
+	#
+	exit -- 1
+!!
+
+
+<< log / json / rfc5424
+	test "${#}" -eq 0
+	exec -- logger \
+			--udp --server=127.35.195.99 --port=8514 --size=65535 \
+			--rfc5424 \
+			--tag="test" --msgid="json" --id=959317 \
+			--stderr \
+		< <(
+			while true ; do
+				printf '{"a":%s, "b":%s, "c":%s, "d":%s}\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+				sleep -- 1s
+			done
+		) \
+	#
+	exit -- 1
+!!
+
+<< log / json / rfc3164
+	test "${#}" -eq 0
+	exec -- logger \
+			--udp --server=127.35.195.99 --port=8514 --size=65535 \
+			--rfc3164 \
+			--tag="test" --msgid="json" --id=959317 \
+			--stderr \
+		< <(
+			while true ; do
+				printf '{"a":%s, "b":%s, "c":%s, "d":%s}\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+				sleep -- 1s
+			done
+		) \
+	#
 	exit -- 1
 !!
 
