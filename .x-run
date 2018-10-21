@@ -39,8 +39,8 @@
 	exec -- ./.outputs/main \
 			--input-syslog-listen-udp 127.35.195.99:8514 \
 			--input-syslog-format rfc5424 \
+			--input-syslog-json=true \
 			--output-stdout-json-pretty=true \
-			--parser-message-json=true \
 			--parser-message-raw=false \
 			--report-timeout 6s \
 			"${@}" \
@@ -53,8 +53,8 @@
 	exec -- ./.outputs/main \
 			--input-syslog-listen-udp 127.35.195.99:8514 \
 			--input-syslog-format rfc3164 \
+			--input-syslog-json=true \
 			--output-stdout-json-pretty=true \
-			--parser-message-json=true \
 			--parser-message-raw=false \
 			--report-timeout 6s \
 			"${@}" \
@@ -85,13 +85,13 @@
 	exec -- ./.outputs/main \
 			--input-syslog-listen-udp 127.35.195.99:8514 \
 			--input-syslog-format rfc5424 \
+			--input-syslog-json=true \
 			--output-stdout-json-pretty=true \
-			--parser-message-json=true \
 			--parser-message-raw=false \
-			--report-timeout 6s \
 			--parser-external-command 'jq --unbuffered @{script}' \
 			--parser-external-script "${_jq_script}" \
 			--parser-external-replace=true \
+			--report-timeout 6s \
 			"${@}" \
 		#
 	exit -- 1
@@ -114,13 +114,13 @@
 	exec -- ./.outputs/main \
 			--input-syslog-listen-udp 127.35.195.99:8514 \
 			--input-syslog-format rfc5424 \
+			--input-syslog-json=true \
 			--output-stdout-json-pretty=true \
-			--parser-message-json=true \
 			--parser-message-raw=false \
-			--report-timeout 6s \
 			--parser-external-command 'jq --unbuffered @{script}' \
 			--parser-external-script "${_jq_script}" \
 			--parser-external-replace=false \
+			--report-timeout 6s \
 			"${@}" \
 		#
 	exit -- 1
@@ -132,6 +132,7 @@
 	exec -- ./.outputs/main \
 			--input-syslog-listen-udp 127.35.195.99:8514 \
 			--input-syslog-format rfc5424 \
+			--input-syslog-json=true \
 			--output-stdout=false \
 			--output-file-current-symlink ./.logs/tail \
 			--output-file-current-store ./.logs/current \
@@ -140,7 +141,6 @@
 			--output-file-json-pretty=false \
 			--output-file-messages 6 \
 			--output-file-timeout 6s \
-			--parser-message-json=true \
 			--parser-message-raw=true \
 			--report-timeout 6s \
 			"${@}" \

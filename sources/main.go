@@ -30,12 +30,13 @@ import syslog_format "gopkg.in/mcuadros/go-syslog.v2/format"
 
 
 const DefaultInputSyslogEnabled = false
-const DefaultInputSyslogIdentifier = "syslog"
+const DefaultInputSyslogIdentifier = ""
 const DefaultInputSyslogListenTcp = ""
 const DefaultInputSyslogTimeoutTcp = 360
 const DefaultInputSyslogListenUdp = ""
 const DefaultInputSyslogListenUnix = ""
 const DefaultInputSyslogFormat = "rfc3164"
+const DefaultInputSyslogParseJson = true
 const DefaultInputSyslogQueueSize = 16 * 1024
 const DefaultInputSyslogDebug = false
 
@@ -71,7 +72,6 @@ const DefaultOutputFileDebug = false
 
 const DefaultOutputBufferSize = 16 * 1024
 
-const DefaultParserMessageJson = true
 const DefaultParserMessageRaw = true
 const DefaultParserMessageSha256 = true
 const DefaultParserExternalReplace = false
@@ -96,7 +96,8 @@ type Message struct {
 	Sequence uint64 `json:"sequence"`
 	Timestamp time.Time `json:"timestamp"`
 	TimestampUnix uint64 `json:"timestamp_unix"`
-	Collector string `json:"collector,omitempty"`
+	CollectorType string `json:"collector_type,omitempty"`
+	CollectorIdentifier string `json:"collector_identifier,omitempty"`
 	
 	MessageRaw []byte `json:"message_raw,omitempty"`
 	MessageSha256 string `json:"message_sha256,omitempty"`
@@ -106,16 +107,18 @@ type Message struct {
 	MessageMetaData interface{} `json:"message_metadata,omitempty"`
 }
 
-const MessageSchema = "20181020a"
+const MessageSchema = "20181020b"
 
 
 type CollectorMessage struct {
 	
-	Collector string
+	CollectorType string
+	CollectorIdentifier string
 	
 	MessageRaw []byte
 	MessageSha256 string
 	MessageText string
+	MessageJson json.RawMessage
 	MessageMetaData interface{}
 }
 
@@ -138,6 +141,7 @@ type SyslogMessageMetaData struct {
 	Fields map[string]interface{} `json:"fields"`
 }
 
+const SyslogCollectorType = "syslog"
 const SyslogMessageMetaDataSchema = "syslog:20181020a"
 
 
@@ -152,6 +156,7 @@ type InputSyslogConfiguration struct {
 	ListenUnix string
 	FormatName string
 	FormatParser syslog_format.Format
+	ParseJson bool
 	QueueSize uint
 	Debug bool
 }
@@ -319,6 +324,7 @@ func configure (_arguments []string) (*Configuration, error) {
 	_inputSyslogListenUdp := _flags.String ("input-syslog-listen-udp", DefaultInputSyslogListenUdp, "<ip>:<port>")
 	_inputSyslogListenUnix := _flags.String ("input-syslog-listen-unix", DefaultInputSyslogListenUnix, "<path>")
 	_inputSyslogFormatName := _flags.String ("input-syslog-format", DefaultInputSyslogFormat, "rfc3164 | rfc5424")
+	_inputSyslogParseJson := _flags.Bool ("input-syslog-json", DefaultInputSyslogParseJson, "true (*) | false")
 	_inputSyslogQueueSize := _flags.Uint ("input-syslog-queue", DefaultInputSyslogQueueSize, "<size>")
 	_inputSyslogDebug := _flags.Bool ("input-syslog-debug", DefaultInputSyslogDebug, "true | false (*)")
 	
@@ -352,7 +358,6 @@ func configure (_arguments []string) (*Configuration, error) {
 	_dequeueReportInterval := _flags.Duration ("report-timeout", DefaultDequeueReportInterval, "<duration>")
 	_dequeueReportCounter := _flags.Uint ("report-messages", DefaultDequeueReportCounter, "<count>")
 	
-	_parserMessageJson := _flags.Bool ("parser-message-json", DefaultParserMessageJson, "true (*) | false")
 	_parserMessageRaw := _flags.Bool ("parser-message-raw", DefaultParserMessageRaw, "true (*) | false")
 	_parserMessageSha256 := _flags.Bool ("parser-message-sha256", DefaultParserMessageSha256, "true (*) | false")
 	_parserExternalCommand := _flags.String ("parser-external-command", "", "<command> <argument> ...")
@@ -396,6 +401,7 @@ func configure (_arguments []string) (*Configuration, error) {
 				ListenUnix : *_inputSyslogListenUnix,
 				FormatName : *_inputSyslogFormatName,
 				FormatParser : _inputSyslogFormatParser,
+				ParseJson : *_inputSyslogParseJson,
 				QueueSize : *_inputSyslogQueueSize,
 				Debug : *_inputSyslogDebug || *_forcedDebug,
 			}
@@ -534,7 +540,6 @@ func configure (_arguments []string) (*Configuration, error) {
 	}
 	
 	_parserConfiguration := & ParserConfiguration {
-			MessageJson : *_parserMessageJson,
 			MessageRaw : *_parserMessageRaw,
 			MessageSha256 : *_parserMessageSha256,
 			ExternalCommand : _parserExternalCommand_0,
@@ -794,6 +799,16 @@ func inputSyslogProcess (_context *InputSyslogContext, _syslogMessage syslog_for
 		return _error
 	}
 	
+	var _messageJson json.RawMessage = nil
+	if _configuration.ParseJson {
+		_messageText_0 := strings.TrimSpace (_messageText)
+		if strings.HasPrefix (_messageText_0, "{") && strings.HasSuffix (_messageText_0, "}") {
+			if _error := json.Unmarshal ([]byte (_messageText_0), &_messageJson); _error == nil {
+				_messageText = ""
+			}
+		}
+	}
+	
 	var _timestamp time.Time
 	if _value, _error := syslogPartExtractAsTime (_syslogMessage, []string {"timestamp"}, true, false); _error == nil {
 		_timestamp = _value
@@ -874,10 +889,12 @@ func inputSyslogProcess (_context *InputSyslogContext, _syslogMessage syslog_for
 	}
 	
 	_collectorMessage := & CollectorMessage {
-			Collector : _configuration.Identifier,
+			CollectorType : SyslogCollectorType,
+			CollectorIdentifier : _configuration.Identifier,
 			MessageRaw : _messageRaw,
 			MessageSha256 : _messageSha256,
 			MessageText : _messageText,
+			MessageJson : _messageJson,
 			MessageMetaData : & SyslogMessageMetaData {
 					Schema : SyslogMessageMetaDataSchema,
 					Protocol : _configuration.FormatName,
@@ -1219,21 +1236,13 @@ func parserProcess (_context *ParserContext, _collectorMessage *CollectorMessage
 	
 	_timestamp := time.Now ()
 	
-	_collector := _collectorMessage.Collector
+	_collectorType := _collectorMessage.CollectorType
+	_collectorIdentifier := _collectorMessage.CollectorIdentifier
 	_messageRaw := _collectorMessage.MessageRaw
 	_messageSha256 := _collectorMessage.MessageSha256
 	_messageText := _collectorMessage.MessageText
+	_messageJson := _collectorMessage.MessageJson
 	_messageMetaData := _collectorMessage.MessageMetaData
-	
-	var _messageJson json.RawMessage = nil
-	if _configuration.MessageJson {
-		_messageText_0 := strings.TrimSpace (_messageText)
-		if strings.HasPrefix (_messageText_0, "{") && strings.HasSuffix (_messageText_0, "}") {
-			if _error := json.Unmarshal ([]byte (_messageText_0), &_messageJson); _error == nil {
-				_messageText = ""
-			}
-		}
-	}
 	
 	_message := & Message {
 			Schema : MessageSchema,
@@ -1241,7 +1250,8 @@ func parserProcess (_context *ParserContext, _collectorMessage *CollectorMessage
 			Sequence : _sequence,
 			Timestamp : _timestamp,
 			TimestampUnix : uint64 (_timestamp.UnixNano () / 1000000),
-			Collector : _collector,
+			CollectorType : _collectorType,
+			CollectorIdentifier : _collectorIdentifier,
 			MessageRaw : _messageRaw,
 			MessageSha256 : _messageSha256,
 			MessageText : _messageText,
