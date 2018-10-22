@@ -62,6 +62,19 @@
 	exit -- 1
 !!
 
+<< go / execute / main / http + stdout-only
+	"${X_RUN[@]}" ':: go / build / main / debug'
+	exec -- ./.outputs/main \
+			--input-http-listen-tcp 127.35.195.99:8080 \
+			--input-http-json=true \
+			--output-stdout-json-pretty=true \
+			--parser-message-raw=false \
+			--report-timeout 6s \
+			"${@}" \
+		#
+	exit -- 1
+!!
+
 
 << go / execute / main / udp + stdout-only + jq / replace / rfc5424
 	"${X_RUN[@]}" ':: go / build / main / debug'
@@ -151,7 +164,7 @@
 
 
 
-<< log / text / rfc5424
+<< generate / syslog / text / rfc5424
 	test "${#}" -eq 0
 	exec -- logger \
 			--udp --server=127.35.195.99 --port=8514 --size=65535 \
@@ -160,7 +173,7 @@
 			--stderr \
 		< <(
 			while true ; do
-				printf '[~~]  message:  %s %s %s %s!\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+				printf -- '[~~]  message:  %s %s %s %s!\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
 				sleep -- 1s
 			done
 		) \
@@ -168,7 +181,7 @@
 	exit -- 1
 !!
 
-<< log / text / rfc3164
+<< generate / syslog / text / rfc3164
 	test "${#}" -eq 0
 	exec -- logger \
 			--udp --server=127.35.195.99 --port=8514 --size=65535 \
@@ -177,7 +190,7 @@
 			--stderr \
 		< <(
 			while true ; do
-				printf '[~~]  message:  %s %s %s %s!\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+				printf -- '[~~]  message:  %s %s %s %s!\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
 				sleep -- 1s
 			done
 		) \
@@ -186,7 +199,7 @@
 !!
 
 
-<< log / json / rfc5424
+<< generate / syslog / json / rfc5424
 	test "${#}" -eq 0
 	exec -- logger \
 			--udp --server=127.35.195.99 --port=8514 --size=65535 \
@@ -195,7 +208,7 @@
 			--stderr \
 		< <(
 			while true ; do
-				printf '{"a":%s, "b":%s, "c":%s, "d":%s}\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+				printf -- '{"a":%s, "b":%s, "c":%s, "d":%s}\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
 				sleep -- 1s
 			done
 		) \
@@ -203,7 +216,7 @@
 	exit -- 1
 !!
 
-<< log / json / rfc3164
+<< generate / syslog / json / rfc3164
 	test "${#}" -eq 0
 	exec -- logger \
 			--udp --server=127.35.195.99 --port=8514 --size=65535 \
@@ -212,11 +225,53 @@
 			--stderr \
 		< <(
 			while true ; do
-				printf '{"a":%s, "b":%s, "c":%s, "d":%s}\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+				printf -- '{"a":%s, "b":%s, "c":%s, "d":%s}\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
 				sleep -- 1s
 			done
 		) \
 	#
+	exit -- 1
+!!
+
+
+<< generate / http / json
+	test "${#}" -eq 0
+	while true ; do
+		printf -- '[--]\n' >&2
+		curl \
+				-i -s -f \
+				-X POST \
+				-H 'Content-Type: application/json' \
+				--data-binary @- \
+				--retry 360 --retry-delay 1 --retry-connrefused \
+				-- http://127.35.195.99:8080/push \
+			< <(
+				printf -- '{"a":%s, "b":%s, "c":%s, "d":%s}\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+			) \
+		#
+		sleep -- 1s
+	done
+	exit -- 1
+!!
+
+
+<< generate / http / text
+	test "${#}" -eq 0
+	while true ; do
+		printf -- '[--]\n' >&2
+		curl \
+				-i -s -f \
+				-X POST \
+				-H 'Content-Type: text/plain' \
+				--data-binary @- \
+				--retry 360 --retry-delay 1 --retry-connrefused \
+				-- http://127.35.195.99:8080/push \
+			< <(
+				printf -- '[~~]  message:  %s, %s, %s, %s!\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+			) \
+		#
+		sleep -- 1s
+	done
 	exit -- 1
 !!
 
@@ -245,6 +300,14 @@
 	exit -- 1
 !!
 
+
+
+
+<< sources / grep / codes
+	test "${#}" -eq 0
+	grep -o -P -e '(?<=\[)[0-9a-f]{8}(?=\])' -h -r . --include '*.go' | sort | uniq -d
+	exit -- 0
+!!
 
 
 

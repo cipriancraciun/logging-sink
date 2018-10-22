@@ -11,7 +11,10 @@ import "encoding/json"
 import "flag"
 import "fmt"
 import "io"
+import "io/ioutil"
 import "log"
+import "mime"
+import "net/http"
 import "os"
 import "os/exec"
 import "os/signal"
@@ -22,6 +25,7 @@ import "strings"
 import "sync"
 import "syscall"
 import "time"
+import "unicode/utf8"
 
 import syslog "gopkg.in/mcuadros/go-syslog.v2"
 import syslog_format "gopkg.in/mcuadros/go-syslog.v2/format"
@@ -32,13 +36,22 @@ import syslog_format "gopkg.in/mcuadros/go-syslog.v2/format"
 const DefaultInputSyslogEnabled = false
 const DefaultInputSyslogIdentifier = ""
 const DefaultInputSyslogListenTcp = ""
-const DefaultInputSyslogTimeoutTcp = 360
 const DefaultInputSyslogListenUdp = ""
 const DefaultInputSyslogListenUnix = ""
+const DefaultInputSyslogTimeout = 6 * time.Second
 const DefaultInputSyslogFormat = "rfc3164"
 const DefaultInputSyslogParseJson = true
 const DefaultInputSyslogQueueSize = 16 * 1024
 const DefaultInputSyslogDebug = false
+
+const DefaultInputHttpEnabled = false
+const DefaultInputHttpIdentifier = ""
+const DefaultInputHttpListenTcp = ""
+const DefaultInputHttpTimeout = 6 * time.Second
+const DefaultInputHttpAllowedPath = ""
+const DefaultInputHttpParseJson = true
+const DefaultInputHttpQueueSize = 16 * 1024
+const DefaultInputHttpDebug = false
 
 const DefaultOutputStdoutEnabled = true
 const DefaultOutputStdoutJsonPretty = true
@@ -145,15 +158,47 @@ const SyslogCollectorType = "syslog"
 const SyslogMessageMetaDataSchema = "syslog:20181020a"
 
 
+type HttpMessageMetaData struct {
+	
+	Schema string `json:"schema,omitempty"`
+	
+	Protocol string `json:"protocol,omitempty"`
+	Url string `json:"url,omitempty"`
+	UrlRaw string `json:"url_raw,omitempty"`
+	
+	Host string `json:"host,omitempty"`
+	Method string `json:"method,omitempty"`
+	Path string `json:"path,omitempty"`
+	Query map[string][]string `json:"query,omitempty"`
+	QueryRaw string `json:"query_raw,omitempty"`
+	Headers HttpMessageHeaders `json:"headers,omitempty"`
+	Trailers HttpMessageHeaders `json:"trailers,omitempty"`
+	Remote string `json:"remote,omitempty"`
+	
+	ContentType string `json:"content_type,omitempty"`
+	ContentTypeParameters map[string]string `json:"content_type_parameters,omitempty"`
+	ContentEncoding string `json:"content_encoding,omitempty"`
+	ContentLength int64 `json:"content_length,omitempty"`
+	
+	TransferEncoding HttpMessageHeaderValue `json:"transfer_encoding,omitempty"`
+}
+
+type HttpMessageHeaders map[string]HttpMessageHeaderValue
+type HttpMessageHeaderValue interface{}
+
+const HttpCollectorType = "http"
+const HttpMessageMetaDataSchema = "http:20181020a"
+
+
 
 
 type InputSyslogConfiguration struct {
 	
 	Identifier string
 	ListenTcp string
-	TimeoutTcp uint
 	ListenUdp string
 	ListenUnix string
+	Timeout time.Duration
 	FormatName string
 	FormatParser syslog_format.Format
 	ParseJson bool
@@ -167,6 +212,32 @@ type InputSyslogContext struct {
 	initialized bool
 	
 	server *syslog.Server
+	
+	messagesQueue chan<- *CollectorMessage
+	signalsQueue <-chan os.Signal
+	exitGroup *sync.WaitGroup
+}
+
+
+
+
+type InputHttpConfiguration struct {
+	
+	Identifier string
+	ListenTcp string
+	Timeout time.Duration
+	AllowedPath string
+	ParseJson bool
+	QueueSize uint
+	Debug bool
+}
+
+type InputHttpContext struct {
+	
+	configuration *InputHttpConfiguration
+	initialized bool
+	
+	server *http.Server
 	
 	messagesQueue chan<- *CollectorMessage
 	signalsQueue <-chan os.Signal
@@ -303,6 +374,7 @@ type ParserContext struct {
 type Configuration struct {
 	
 	InputSyslog *InputSyslogConfiguration
+	InputHttp *InputHttpConfiguration
 	OutputStdout *OutputStdoutConfiguration
 	OutputFile *OutputFileConfiguration
 	Dequeue *DequeueConfiguration
@@ -327,6 +399,14 @@ func configure (_arguments []string) (*Configuration, error) {
 	_inputSyslogParseJson := _flags.Bool ("input-syslog-json", DefaultInputSyslogParseJson, "true (*) | false")
 	_inputSyslogQueueSize := _flags.Uint ("input-syslog-queue", DefaultInputSyslogQueueSize, "<size>")
 	_inputSyslogDebug := _flags.Bool ("input-syslog-debug", DefaultInputSyslogDebug, "true | false (*)")
+	
+	_inputHttpEnabled := _flags.Bool ("input-http", DefaultInputHttpEnabled, "true (*) | false")
+	_inputHttpIdentifier := _flags.String ("input-http-identifier", DefaultInputHttpIdentifier, "<identifier>")
+	_inputHttpListenTcp := _flags.String ("input-http-listen-tcp", DefaultInputHttpListenTcp, "<ip>:<port>")
+	_inputHttpAllowedPath := _flags.String ("input-http-allowed-path", DefaultInputHttpAllowedPath, "<path>")
+	_inputHttpParseJson := _flags.Bool ("input-http-json", DefaultInputHttpParseJson, "true (*) | false")
+	_inputHttpQueueSize := _flags.Uint ("input-http-queue", DefaultInputHttpQueueSize, "<size>")
+	_inputHttpDebug := _flags.Bool ("input-http-debug", DefaultInputHttpDebug, "true | false (*)")
 	
 	_outputStdoutEnabled := _flags.Bool ("output-stdout", DefaultOutputStdoutEnabled, "true (*) | false")
 	_outputStdoutJsonPretty := _flags.Bool ("output-stdout-json-pretty", DefaultOutputStdoutJsonPretty, "true (*) | false")
@@ -396,9 +476,9 @@ func configure (_arguments []string) (*Configuration, error) {
 		_inputSyslogConfiguration = & InputSyslogConfiguration {
 				Identifier : *_inputSyslogIdentifier,
 				ListenTcp : *_inputSyslogListenTcp,
-				TimeoutTcp : DefaultInputSyslogTimeoutTcp,
 				ListenUdp : *_inputSyslogListenUdp,
 				ListenUnix : *_inputSyslogListenUnix,
+				Timeout : DefaultInputSyslogTimeout,
 				FormatName : *_inputSyslogFormatName,
 				FormatParser : _inputSyslogFormatParser,
 				ParseJson : *_inputSyslogParseJson,
@@ -406,6 +486,24 @@ func configure (_arguments []string) (*Configuration, error) {
 				Debug : *_inputSyslogDebug || *_forcedDebug,
 			}
 		_globalDebug = _globalDebug || _inputSyslogConfiguration.Debug
+	}
+	
+	
+	var _inputHttpConfiguration *InputHttpConfiguration = nil
+	if *_inputHttpListenTcp != "" {
+		*_inputHttpEnabled = true
+	}
+	if *_inputHttpEnabled {
+		_inputHttpConfiguration = & InputHttpConfiguration {
+				Identifier : *_inputHttpIdentifier,
+				ListenTcp : *_inputHttpListenTcp,
+				Timeout : DefaultInputHttpTimeout,
+				AllowedPath : *_inputHttpAllowedPath,
+				ParseJson : *_inputHttpParseJson,
+				QueueSize : *_inputHttpQueueSize,
+				Debug : *_inputHttpDebug || *_forcedDebug,
+			}
+		_globalDebug = _globalDebug || _inputHttpConfiguration.Debug
 	}
 	
 	
@@ -435,10 +533,10 @@ func configure (_arguments []string) (*Configuration, error) {
 		if *_outputFileCurrentStorePath != "" {
 			if _stat, _error := os.Stat (*_outputFileCurrentStorePath); _error == nil {
 				if ! _stat.IsDir () {
-					return nil, fmt.Errorf ("[6b395329]  invalid `output-file-current-store` (not a folder):  `%s`!", *_outputFileCurrentStorePath)
+					return nil, fmt.Errorf ("[65696d6c]  invalid `output-file-current-store` (not a folder):  `%s`!", *_outputFileCurrentStorePath)
 				}
 			} else if os.IsNotExist (_error) {
-				return nil, fmt.Errorf ("[c5fd42a7]  invalid `output-file-current-store` (does not exist):  `%s`!", *_outputFileCurrentStorePath)
+				return nil, fmt.Errorf ("[f11abf34]  invalid `output-file-current-store` (does not exist):  `%s`!", *_outputFileCurrentStorePath)
 			} else {
 				return nil, _error
 			}
@@ -551,6 +649,7 @@ func configure (_arguments []string) (*Configuration, error) {
 	
 	_configuration := & Configuration {
 			InputSyslog : _inputSyslogConfiguration,
+			InputHttp : _inputHttpConfiguration,
 			OutputStdout : _outputStdoutConfiguration,
 			OutputFile : _outputFileConfiguration,
 			Dequeue : _dequeueConfiguration,
@@ -568,16 +667,18 @@ func inputSyslogInitialize (_configuration *InputSyslogConfiguration, _messagesQ
 	
 	_server := syslog.NewServer ()
 	
-	_server.SetTimeout (int64 (_configuration.TimeoutTcp) * 1000)
-	
 	if _configuration.Debug {
 		log.Printf ("[ii] [fe61c4fc]  input syslog using protocol `%s`;\n", _configuration.FormatName)
 	}
-	
 	_serverFormat := & InputSyslogFormat {
 			delegate : _configuration.FormatParser,
 		}
 	_server.SetFormat (_serverFormat)
+	
+	if _configuration.Debug {
+		log.Printf ("[ii] [f989cab8]  input syslog using timeout of `%s`...\n", _configuration.Timeout)
+	}
+	_server.SetTimeout (_configuration.Timeout.Nanoseconds () / 1000000)
 	
 	_listening := false
 	if _configuration.ListenTcp != "" {
@@ -997,6 +1098,332 @@ func syslogPartExtractAsTime (_message syslog_format.LogParts, _keys []string, _
 
 
 
+func inputHttpInitialize (_configuration *InputHttpConfiguration, _messagesQueue chan<- *CollectorMessage, _signalsQueue <-chan os.Signal, _exitGroup *sync.WaitGroup) (*InputHttpContext, error) {
+	
+	_server := & http.Server {
+			// ErrorLog : !!!!,
+		}
+	
+	if _configuration.Debug {
+		log.Printf ("[ii] [8e924835]  input http using timeout of `%s`...\n", _configuration.Timeout)
+	}
+	_server.ReadTimeout = _configuration.Timeout
+	_server.WriteTimeout = _configuration.Timeout
+	_server.IdleTimeout = _configuration.Timeout
+	
+	_listening := false
+	if _configuration.ListenTcp != "" {
+		if _configuration.Debug {
+			log.Printf ("[ii] [e60673cd]  input http listening on TCP at `%s`...\n", _configuration.ListenTcp)
+		}
+		_server.Addr = _configuration.ListenTcp
+		_listening = true
+	}
+	
+	if !_listening {
+		return nil, fmt.Errorf ("[20732489]  input http has no listeners configured!")
+	}
+	
+	if _configuration.Debug {
+		log.Printf ("[ii] [6ff0ba51]  input http starting...\n")
+	}
+	
+	_context := & InputHttpContext {
+			configuration : _configuration,
+			initialized : true,
+			server : _server,
+			messagesQueue : _messagesQueue,
+			signalsQueue : _signalsQueue,
+			exitGroup : _exitGroup,
+		}
+	
+	_server.Handler = (*InputHttpHandler) (_context)
+	
+	_bootError := make (chan error)
+	go func () () {
+		_bootError <- _server.ListenAndServe ()
+	} ()
+	time.Sleep (100 * time.Millisecond)
+	select {
+		case _error := <- _bootError :
+			return nil, _error
+		default :
+	}
+	
+	_exitGroup.Add (1)
+	
+	go inputHttpLooper (_context)
+	
+	return _context, nil
+}
+
+
+func inputHttpFinalize (_context *InputHttpContext) (error) {
+	
+	if ! _context.initialized {
+		return nil
+	}
+	
+	var _error error = nil
+	if _context.server != nil {
+		_error = _context.server.Close ()
+	}
+	
+	_exitGroup := _context.exitGroup
+	
+	_context.server = nil
+	_context.messagesQueue = nil
+	_context.signalsQueue = nil
+	_context.exitGroup = nil
+	_context.initialized = false
+	
+	_exitGroup.Done ()
+	
+	return _error
+}
+
+
+func inputHttpLooper (_context *InputHttpContext) (error) {
+	
+	if ! _context.initialized {
+		return nil
+	}
+	
+	_configuration := _context.configuration
+	
+	if _configuration.Debug {
+		log.Printf ("[ii] [e00a19dd]  input http started;\n")
+	}
+	
+	_stop : for {
+		select {
+			
+			case _signal := <- _context.signalsQueue :
+				switch _signal {
+					
+					case syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT :
+						if _configuration.Debug {
+							log.Printf ("[ww] [8504a17a]  input http interrupted by signal:  `%s`;  terminating!\n", _signal)
+						}
+						break _stop
+					
+					case syscall.SIGHUP :
+					
+					default :
+						log.Printf ("[ee] [01156c7f]  input http interrupted by unexpected signal:  `%s`;  ignoring!\n", _signal)
+				}
+		}
+	}
+	
+	if _configuration.Debug {
+		log.Printf ("[ii] [3b0714cb]  input http finalizing...\n")
+	}
+	if _error := inputHttpFinalize (_context); _error != nil {
+		logError (_error, "[707272da]  input http failed to finalize;  ignoring!")
+		return _error
+	}
+	
+	log.Printf ("[ii] [f65a6d1a]  input http terminated;\n")
+	return nil
+}
+
+
+type InputHttpHandler InputHttpContext
+
+func (_context_0 *InputHttpHandler) ServeHTTP (_response http.ResponseWriter, _request *http.Request) () {
+	
+	if (_request.RequestURI == "/__/heartbeat") {
+		_response.Header () ["Content-Type"] = []string { "text/plain" }
+		_response.WriteHeader (200)
+		_response.Write ([]byte ("OK\n"))
+		return
+	}
+	
+	_context := (*InputHttpContext) (_context_0)
+	
+	if _error := inputHttpProcess (_context, _request); _error == nil {
+		_response.Header () ["Content-Type"] = []string { "text/plain" }
+		_response.WriteHeader (200)
+		_response.Write ([]byte ("OK\n"))
+	} else {
+		logError (_error, "[61095a98]  input http failed to process message;  ignoring!\n")
+		_response.Header () ["Content-Type"] = []string { "text/plain" }
+		_response.WriteHeader (500)
+		_response.Write ([]byte ("NOK\n"))
+	}
+}
+
+
+func inputHttpProcess (_context *InputHttpContext, _request *http.Request) (error) {
+	
+	_configuration := _context.configuration
+	
+	var _messageRaw []byte
+	if _messageRaw_0, _error := inputHttpRequestExtractData (_context, _request); _error == nil {
+		_messageRaw = _messageRaw_0
+	} else {
+		logError (_error, "[76b2f6fc]  input http failed reading request body;  ignoring!")
+		return nil
+	}
+	
+	_messageSha256Raw := sha256.Sum256 (_messageRaw)
+	_messageSha256 := hex.EncodeToString (_messageSha256Raw[:])
+	
+	_messageParseable := true
+	
+	if len (_request.TransferEncoding) != 0 {
+		log.Printf ("[ww] [2ed4bb6]  input http failed accepting transfer encoding:  unsupported encoding `%#v`;  ignoring and aborting parsing!\n", _request.TransferEncoding)
+		_messageParseable = false
+	}
+	
+	_messageContentEncoding := _request.Header.Get ("Content-Encoding")
+	//  NOTE:  See: https://www.iana.org/assignments/http-parameters/http-parameters.xhtml#content-coding
+	switch _messageContentEncoding {
+		case "", "identity" :
+			_messageContentEncoding = ""
+		case
+				"gzip", "x-gzip",
+				"deflate",
+				"compress", "x-compress",
+				"br" :
+			log.Printf ("[ww] [060ec0e1]  input http failed accepting content encoding:  unsupported encoding `%s`;  ignoring and aborting parsing!\n", _messageContentEncoding)
+			_messageParseable = false
+		default :
+			log.Printf ("[ee] [0369add3]  input http failed accepting content encoding:  unknown encoding `%s`;  ignoring and aborting parsing!\n", _messageContentEncoding)
+			_messageParseable = false
+	}
+	
+	_messageContentType := _request.Header.Get ("Content-Type")
+	var _messageContentTypeParameters map[string]string = nil
+	if _messageContentType != "" {
+		if _type, _parameters, _error := mime.ParseMediaType (_messageContentType); _error == nil {
+			_messageContentType = _type
+			_messageContentTypeParameters = _parameters
+		} else {
+			logError (_error, "[508c527b]  input http failed accepting content type:  invalid format;  ignoring and aborting parsing!")
+			_messageContentType = ""
+			_messageParseable = false
+		}
+	} else {
+		log.Printf ("[ww] [25f3b227]  input http failed accepting content type:  missing;  ignoring and aborting parsing!\n")
+			_messageParseable = false
+	}
+	
+	var _messageText string = ""
+	var _messageJson json.RawMessage = nil
+	
+	if _messageParseable {
+		switch _messageContentType {
+			case "text/plain", "application/json", "application/xml" :
+				if utf8.Valid (_messageRaw) {
+					_messageText = string (_messageRaw)
+				} else {
+					log.Printf ("[ww] [9d938d82]  input http failed accepting body:  invalid UTF-8;  ignoring and aborting parsing!\n")
+					_messageParseable = false
+				}
+			default :
+				_messageParseable = false
+		}
+	}
+	
+	if _messageParseable {
+		switch _messageContentType {
+			case "text/plain", "application/xml" :
+			case "application/json" :
+				if _error := json.Unmarshal ([]byte (_messageText), &_messageJson); _error == nil {
+					_messageText = ""
+				} else {
+					logError (_error, "[fb140c77]  input http failed accepting body:  invalid format;  ignoring and aborting parsing!")
+					_messageParseable = false
+				}
+			default :
+				log.Printf ("[ww] [b1a47bf8]  input http failed accepting header `Content-Type`:  unsupported encoding `%s`;  ignoring and aborting parsing!\n", _messageContentType)
+				_messageParseable = false
+		}
+	}
+	
+	_collectorMessage := & CollectorMessage {
+			CollectorType : HttpCollectorType,
+			CollectorIdentifier : _configuration.Identifier,
+			MessageRaw : _messageRaw,
+			MessageSha256 : _messageSha256,
+			MessageText : _messageText,
+			MessageJson : _messageJson,
+			MessageMetaData : & HttpMessageMetaData {
+					Schema : HttpMessageMetaDataSchema,
+					Protocol : strings.ToLower (_request.Proto),
+					Url : _request.URL.String (),
+					UrlRaw : _request.RequestURI,
+					Host : strings.ToLower (_request.Host),
+					Method : strings.ToLower (_request.Method),
+					Path : _request.URL.Path,
+					Query : _request.URL.Query (),
+					QueryRaw : _request.URL.RawQuery,
+					Headers : inputHttpRequestExtractHeaders (_context, _request.Header),
+					Trailers : inputHttpRequestExtractHeaders (_context, _request.Trailer),
+					Remote : _request.RemoteAddr,
+					ContentType : _messageContentType,
+					ContentTypeParameters : _messageContentTypeParameters,
+					ContentEncoding : _messageContentEncoding,
+					ContentLength : _request.ContentLength,
+					TransferEncoding : inputHttpRequestExtractHeaderValue (_context, _request.TransferEncoding),
+				},
+		}
+	
+	_context.messagesQueue <- _collectorMessage
+	
+	return nil
+}
+
+
+func inputHttpRequestExtractData (_context *InputHttpContext, _request *http.Request) ([]byte, error) {
+	
+	var _data []byte
+	if _data_0, _error := ioutil.ReadAll (_request.Body); _error == nil {
+		_data = _data_0
+	} else {
+		return nil, _error
+	}
+	
+	if len (_data) == 0 {
+		_data = nil
+	}
+	
+	return _data, nil
+}
+
+
+func inputHttpRequestExtractHeaders (_context *InputHttpContext, _httpHeaders http.Header) (HttpMessageHeaders) {
+	
+	_headers := make (map[string]HttpMessageHeaderValue, len (_httpHeaders))
+	
+	for _identifier, _values := range _httpHeaders {
+		_identifier = strings.ToLower (_identifier)
+		_headers[_identifier] = inputHttpRequestExtractHeaderValue (_context, _values)
+	}
+	
+	return _headers
+}
+
+func inputHttpRequestExtractHeaderValue (_context *InputHttpContext, _values []string) (HttpMessageHeaderValue) {
+	
+	if _values == nil {
+		return nil
+	}
+	
+	switch len (_values) {
+		case 0 :
+			return nil
+		case 1 :
+			return _values[0]
+		default :
+			return _values
+	}
+}
+
+
+
+
 func dequeueInitialize (_configuration *DequeueConfiguration, _parser *ParserContext, _inboundQueue <-chan *CollectorMessage, _outboundQueues [] chan<- *Message, _signalsQueue <-chan os.Signal, _exitGroup *sync.WaitGroup) (*DequeueContext, error) {
 	
 	_context := & DequeueContext {
@@ -1268,7 +1695,7 @@ func parserProcess (_context *ParserContext, _collectorMessage *CollectorMessage
 	}
 	
 	if _message != nil {
-		if ! _configuration.MessageRaw {
+		if ! _configuration.MessageRaw && ((_message.MessageText != "") || (_message.MessageJson != nil)) {
 			_message.MessageRaw = nil
 		}
 		if ! _configuration.MessageSha256 {
@@ -1410,7 +1837,7 @@ func parserExternalCommandProcess (_context *ParserContext, _message *Message) (
 				if _configuration.ExternalReplace {
 					var _messageReplacement *Message
 					if _error := _context.externalInputJson.Decode (&_messageReplacement); _error != nil {
-						logError (_error, "[14b47643]  parser external failed to input and decode message replacement;  ignoring!")
+						logError (_error, "[f533846e]  parser external failed to input and decode message replacement;  ignoring!")
 						_shouldRestart = true
 						_shouldFail = true
 					} else {
@@ -1750,7 +2177,7 @@ func outputFileOpen (_context *OutputFileContext) (error) {
 	}
 	if _file, _error := os.OpenFile (_context.currentCurrentPath, os.O_CREATE | os.O_EXCL | os.O_WRONLY | os.O_APPEND, _configuration.FileMode); _error == nil {
 		if _configuration.Debug {
-			log.Printf ("[ii] [27432827]  output file succeeded opening current `%s`;\n", _context.currentCurrentPath)
+			log.Printf ("[ii] [ffb1feda]  output file succeeded opening current `%s`;\n", _context.currentCurrentPath)
 		}
 		_context.currentFile = _file
 	} else {
@@ -1826,7 +2253,7 @@ func outputFileClose (_context *OutputFileContext, _wait bool) (error) {
 	
 	if _error := _context.currentFile.Close (); _error == nil {
 		if _configuration.Debug {
-			log.Printf ("[ii] [c1b80cc7]  output file succeeded closing previous `%s`;\n", _context.currentCurrentPath)
+			log.Printf ("[ii] [b8e7c1d1]  output file succeeded closing previous `%s`;\n", _context.currentCurrentPath)
 		}
 	} else {
 		log.Printf ("[ee] [c1b80cc7]  output file failed closing previous `%s`;  ignoring!\n", _context.currentCurrentPath)
@@ -2073,7 +2500,7 @@ func main_0 () (error) {
 	var _inputSyslogContext *InputSyslogContext = nil
 	if _configuration.InputSyslog != nil {
 		if _configuration.Debug {
-			log.Printf ("[ii] [1b82323e]  initializing input syslog...\n")
+			log.Printf ("[ii] [1b82323e]  initializing input http...\n")
 		}
 		_configuration := _configuration.InputSyslog
 		_signalsQueue := make (chan os.Signal, DefaultSignalsQueueSize)
@@ -2081,6 +2508,23 @@ func main_0 () (error) {
 		if _context, _error := inputSyslogInitialize (_configuration, _inputQueue, _signalsQueue, _exitGroup); _error == nil {
 			_inputSyslogContext = _context
 			defer inputSyslogFinalize (_inputSyslogContext)
+		} else {
+			return _error
+		}
+	}
+	
+	
+	var _inputHttpContext *InputHttpContext = nil
+	if _configuration.InputHttp != nil {
+		if _configuration.Debug {
+			log.Printf ("[ii] [e0bab114]  initializing input http...\n")
+		}
+		_configuration := _configuration.InputHttp
+		_signalsQueue := make (chan os.Signal, DefaultSignalsQueueSize)
+		_serviceSignalsQueues = append (_serviceSignalsQueues, _signalsQueue)
+		if _context, _error := inputHttpInitialize (_configuration, _inputQueue, _signalsQueue, _exitGroup); _error == nil {
+			_inputHttpContext = _context
+			defer inputHttpFinalize (_inputHttpContext)
 		} else {
 			return _error
 		}
