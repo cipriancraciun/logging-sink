@@ -30,6 +30,8 @@ import "unicode/utf8"
 import syslog "gopkg.in/mcuadros/go-syslog.v2"
 import syslog_format "gopkg.in/mcuadros/go-syslog.v2/format"
 
+import x2j "github.com/basgys/goxml2json"
+
 
 
 
@@ -50,6 +52,7 @@ const DefaultInputHttpListenTcp = ""
 const DefaultInputHttpTimeout = 6 * time.Second
 const DefaultInputHttpAllowedPath = ""
 const DefaultInputHttpParseJson = true
+const DefaultInputHttpParseXml = true
 const DefaultInputHttpQueueSize = 16 * 1024
 const DefaultInputHttpDebug = false
 
@@ -228,6 +231,7 @@ type InputHttpConfiguration struct {
 	Timeout time.Duration
 	AllowedPath string
 	ParseJson bool
+	ParseXml bool
 	QueueSize uint
 	Debug bool
 }
@@ -405,6 +409,7 @@ func configure (_arguments []string) (*Configuration, error) {
 	_inputHttpListenTcp := _flags.String ("input-http-listen-tcp", DefaultInputHttpListenTcp, "<ip>:<port>")
 	_inputHttpAllowedPath := _flags.String ("input-http-allowed-path", DefaultInputHttpAllowedPath, "<path>")
 	_inputHttpParseJson := _flags.Bool ("input-http-json", DefaultInputHttpParseJson, "true (*) | false")
+	_inputHttpParseXml := _flags.Bool ("input-http-xml", DefaultInputHttpParseXml, "true (*) | false")
 	_inputHttpQueueSize := _flags.Uint ("input-http-queue", DefaultInputHttpQueueSize, "<size>")
 	_inputHttpDebug := _flags.Bool ("input-http-debug", DefaultInputHttpDebug, "true | false (*)")
 	
@@ -500,6 +505,7 @@ func configure (_arguments []string) (*Configuration, error) {
 				Timeout : DefaultInputHttpTimeout,
 				AllowedPath : *_inputHttpAllowedPath,
 				ParseJson : *_inputHttpParseJson,
+				ParseXml : *_inputHttpParseXml,
 				QueueSize : *_inputHttpQueueSize,
 				Debug : *_inputHttpDebug || *_forcedDebug,
 			}
@@ -1328,14 +1334,48 @@ func inputHttpProcess (_context *InputHttpContext, _request *http.Request) (erro
 	
 	if _messageParseable {
 		switch _messageContentType {
-			case "text/plain", "application/xml" :
-			case "application/json" :
-				if _error := json.Unmarshal ([]byte (_messageText), &_messageJson); _error == nil {
-					_messageText = ""
-				} else {
-					logError (_error, "[fb140c77]  input http failed accepting body:  invalid format;  ignoring and aborting parsing!")
+			case "application/json", "application/xml" :
+				_messageText = strings.TrimSpace (_messageText)
+				if _messageText == "" {
+					log.Printf ("[ww] [f49a6c18]  input failed accepting body:  empty (if ignoring whitespaces);  ignoring and aborting parsing!")
 					_messageParseable = false
 				}
+		}
+	}
+	
+	if _messageParseable {
+		switch _messageContentType {
+			
+			case "text/plain" :
+				;
+			
+			case "application/json" :
+				if _configuration.ParseJson {
+					if _error := json.Unmarshal ([]byte (_messageText), &_messageJson); _error == nil {
+						_messageText = ""
+					} else {
+						logError (_error, "[fb140c77]  input http failed accepting body:  invalid JSON format;  ignoring and aborting parsing!")
+						_messageParseable = false
+					}
+				}
+			
+			case "application/xml" :
+				if _configuration.ParseXml {
+					_messageReader := strings.NewReader (_messageText)
+					if _buffer, _error := x2j.Convert (_messageReader, x2j.WithTypeConverter (x2j.Bool, x2j.Int, x2j.Float, x2j.String)); _error == nil {
+						if (_buffer.Len () != 0) && (_buffer.String () != "\"\"\n") {
+							_messageText = ""
+							_messageJson = _buffer.Bytes ()
+						} else {
+							log.Printf ("[ee] [01c85ada]  input http failed accepting body:  invalid XML format;  ignoring and aborting parsing!")
+							_messageParseable = false
+						}
+					} else {
+						logError (_error, "[ffb58358]  input http failed accepting body:  invalid XML format;  ignoring and aborting parsing!")
+						_messageParseable = false
+					}
+				}
+			
 			default :
 				log.Printf ("[ww] [b1a47bf8]  input http failed accepting header `Content-Type`:  unsupported encoding `%s`;  ignoring and aborting parsing!\n", _messageContentType)
 				_messageParseable = false

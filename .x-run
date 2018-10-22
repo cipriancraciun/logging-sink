@@ -234,6 +234,29 @@
 !!
 
 
+
+
+<< generate / http / text
+	test "${#}" -eq 0
+	while true ; do
+		printf -- '[--]\n' >&2
+		curl \
+				-i -s -f \
+				-X POST \
+				-H 'Content-Type: text/plain' \
+				--data-binary @- \
+				--retry 360 --retry-delay 1 --retry-connrefused \
+				-- http://127.35.195.99:8080/push \
+			< <(
+				printf -- '[~~]  message:  %s, %s, %s, %s!\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+			) \
+		#
+		sleep -- 1s
+	done
+	exit -- 1
+!!
+
+
 << generate / http / json
 	test "${#}" -eq 0
 	while true ; do
@@ -255,19 +278,19 @@
 !!
 
 
-<< generate / http / text
+<< generate / http / xml
 	test "${#}" -eq 0
 	while true ; do
 		printf -- '[--]\n' >&2
 		curl \
 				-i -s -f \
 				-X POST \
-				-H 'Content-Type: text/plain' \
+				-H 'Content-Type: application/xml' \
 				--data-binary @- \
 				--retry 360 --retry-delay 1 --retry-connrefused \
 				-- http://127.35.195.99:8080/push \
 			< <(
-				printf -- '[~~]  message:  %s, %s, %s, %s!\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+				printf -- '<test> <a>%s</a> <b>%s</b> <c>%s</c> <d>%s</d> </test>\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
 			) \
 		#
 		sleep -- 1s
