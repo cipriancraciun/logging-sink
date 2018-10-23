@@ -7,7 +7,7 @@
 	test "${#}" -eq 0
 	exec -- "${X_RUN[@]}" ':: go / tool' build \
 			-v \
-			-o ./.outputs/main \
+			-o ./.outputs/main-debug.elf \
 			-- ./sources/main.go \
 		#
 	exit -- 1
@@ -18,9 +18,48 @@
 	exec -- "${X_RUN[@]}" ':: go / tool' build \
 			-v \
 			-ldflags '-s' \
-			-o ./.outputs/main \
+			-o ./.outputs/main-release.elf \
 			-- ./sources/main.go \
 		#
+	exit -- 1
+!!
+
+<< go / build / main / release / publish
+	test "${#}" -eq 0
+	printf -- '[ii]  building...\n' >&2
+	"${X_RUN[@]}" ':: go / build / main / release'
+	if test ! -e ./.outputs/publish ; then
+		mkdir -- ./.outputs/publish
+	fi
+	if test ! -e ./.outputs/publish/bin ; then
+		mkdir -- ./.outputs/publish/bin
+	fi
+	cat \
+		< ./.outputs/main-release.elf \
+		>| ./.outputs/publish/bin/sink.elf \
+	#
+	printf -- '[ii]  compressing gz...\n' >&2
+	gzip -9 \
+		< ./.outputs/main-release.elf \
+		>| ./.outputs/publish/bin/sink.elf.gz \
+	#
+	printf -- '[ii]  compressing bz2...\n' >&2
+	bzip2 -9 \
+		< ./.outputs/main-release.elf \
+		>| ./.outputs/publish/bin/sink.elf.bz2 \
+	#
+	printf -- '[ii]  compressing xz...\n' >&2
+	xz -9 -F xz -C sha256 -T 1 \
+		< ./.outputs/main-release.elf \
+		>| ./.outputs/publish/bin/sink.elf.xz \
+	#
+	exit -- 0
+!!
+
+<< publish
+	test "${#}" -eq 0
+	printf -- '[ii]  publishing to `https://data.volution.ro/ciprian/feb285596a999a6e31a790700a0d5db1`...\n' >&2
+	exec -- rsync -a -v -- ./.outputs/publish/ ./.publish/
 	exit -- 1
 !!
 
@@ -29,14 +68,14 @@
 
 << go / execute / main
 	"${X_RUN[@]}" ':: go / build / main / debug'
-	exec -- ./.outputs/main "${@}"
+	exec -- ./.outputs/main-debug.elf "${@}"
 	exit -- 1
 !!
 
 
 << go / execute / main / udp + stdout-only / rfc5424
 	"${X_RUN[@]}" ':: go / build / main / debug'
-	exec -- ./.outputs/main \
+	exec -- ./.outputs/main-debug.elf \
 			--input-syslog-listen-udp 127.35.195.99:8514 \
 			--input-syslog-format rfc5424 \
 			--input-syslog-json=true \
@@ -50,7 +89,7 @@
 
 << go / execute / main / udp + stdout-only / rfc3164
 	"${X_RUN[@]}" ':: go / build / main / debug'
-	exec -- ./.outputs/main \
+	exec -- ./.outputs/main-debug.elf \
 			--input-syslog-listen-udp 127.35.195.99:8514 \
 			--input-syslog-format rfc3164 \
 			--input-syslog-json=true \
@@ -64,7 +103,7 @@
 
 << go / execute / main / http + stdout-only
 	"${X_RUN[@]}" ':: go / build / main / debug'
-	exec -- ./.outputs/main \
+	exec -- ./.outputs/main-debug.elf \
 			--input-http-listen-tcp 127.35.195.99:8080 \
 			--input-http-json=true \
 			--output-stdout-json-pretty=true \
@@ -95,7 +134,7 @@
 			end
 			
 		'
-	exec -- ./.outputs/main \
+	exec -- ./.outputs/main-debug.elf \
 			--input-syslog-listen-udp 127.35.195.99:8514 \
 			--input-syslog-format rfc5424 \
 			--input-syslog-json=true \
@@ -124,7 +163,7 @@
 			end
 			
 		'
-	exec -- ./.outputs/main \
+	exec -- ./.outputs/main-debug.elf \
 			--input-syslog-listen-udp 127.35.195.99:8514 \
 			--input-syslog-format rfc5424 \
 			--input-syslog-json=true \
@@ -142,7 +181,7 @@
 
 << go / execute / main / udp + file-only / rfc5424
 	"${X_RUN[@]}" ':: go / build / main / debug'
-	exec -- ./.outputs/main \
+	exec -- ./.outputs/main-debug.elf \
 			--input-syslog-listen-udp 127.35.195.99:8514 \
 			--input-syslog-format rfc5424 \
 			--input-syslog-json=true \
