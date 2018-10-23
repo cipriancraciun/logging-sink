@@ -30,7 +30,7 @@ import "unicode/utf8"
 import syslog "gopkg.in/mcuadros/go-syslog.v2"
 import syslog_format "gopkg.in/mcuadros/go-syslog.v2/format"
 
-import x2j "github.com/basgys/goxml2json"
+import x2j "github.com/cipriancraciun/goxml2json"
 
 
 
@@ -1362,7 +1362,7 @@ func inputHttpProcess (_context *InputHttpContext, _request *http.Request) (erro
 			case "application/xml" :
 				if _configuration.ParseXml {
 					_messageReader := strings.NewReader (_messageText)
-					if _buffer, _error := x2j.Convert (_messageReader, x2j.WithTypeConverter (x2j.Bool, x2j.Int, x2j.Float, x2j.String)); _error == nil {
+					if _buffer, _error := x2j.Convert (_messageReader, x2j.WithTypeConverter (x2j.Null, x2j.Bool, x2j.Int, x2j.Float, x2j.String)); _error == nil {
 						if (_buffer.Len () != 0) && (_buffer.String () != "\"\"\n") {
 							_messageText = ""
 							_messageJson = _buffer.Bytes ()
