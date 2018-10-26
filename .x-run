@@ -338,6 +338,27 @@
 !!
 
 
+<< generate / http / xml / x-selection / clipboard
+	test "${#}" -eq 0
+	while true ; do
+		printf -- '[--]\n' >&2
+		curl \
+				-i -s -f \
+				-X POST \
+				-H 'Content-Type: application/xml' \
+				--data-binary @- \
+				--retry 360 --retry-delay 1 --retry-connrefused \
+				-- http://127.35.195.99:8080/push \
+			< <(
+				x-selection co
+			) \
+		#
+		sleep -- 1s
+	done
+	exit -- 1
+!!
+
+
 
 
 << go / dependencies / update
