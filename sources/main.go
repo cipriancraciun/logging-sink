@@ -424,7 +424,7 @@ func configure (_arguments []string) (*Configuration, error) {
 	_outputFileCurrentStorePath := _flags.String ("output-file-current-store", DefaultOutputFileCurrentStorePath, "<path>")
 	_outputFileCurrentSymlinkPath := _flags.String ("output-file-current-symlink", DefaultOutputFileCurrentSymlinkPath, "<path>")
 	_outputFileArchivedStorePath := _flags.String ("output-file-archived-store", DefaultOutputFileArchivedStorePath, "<path>")
-	_outputFileArchivedCompress := _flags.String ("output-file-archived-compress", DefaultOutputFileArchivedCompress, "none | lz4 | lzo | gz | bz2 | xz")
+	_outputFileArchivedCompress := _flags.String ("output-file-archived-compress", DefaultOutputFileArchivedCompress, "none | lz4 | lzo | gz | bz2 | lzip | xz")
 	_outputFileArchivedCompressLevel := _flags.Uint ("output-file-archived-compress-level", DefaultOutputFileArchivedCompressLevel, "<level> (see manual for each compressor)")
 	_outputFileCurrentPrefix := _flags.String ("output-file-current-prefix", DefaultOutputFileCurrentPrefix, "<prefix>")
 	_outputFileArchivedPrefix := _flags.String ("output-file-archived-prefix", DefaultOutputFileArchivedPrefix, "<prefix>")
@@ -583,6 +583,11 @@ func configure (_arguments []string) (*Configuration, error) {
 						"bzip2", _level,
 					}
 				_outputFileArchivedCompressSuffix = ".bz2"
+			case "lzip" :
+				_outputFileArchivedCompressCommand = []string {
+						"lzip", _level,
+					}
+				_outputFileArchivedCompressSuffix = ".lz"
 			case "xz" :
 				_outputFileArchivedCompressCommand = []string {
 						"xz", _level, "-F", "xz", "-C", "sha256", "-T", "1",
