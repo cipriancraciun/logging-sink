@@ -361,6 +361,14 @@
 
 
 
+<< socat / udp
+	test "${#}" -eq 0
+	exec -- socat -u udp-listen:8514,bind=127.35.195.99,reuseaddr stdout
+!!
+
+
+
+
 << go / dependencies / update
 	test "${#}" -eq 0
 	exec -- "${X_RUN[@]}" ':: go / tool' get -v -d -- ./sources/...
