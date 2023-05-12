@@ -5,7 +5,7 @@
 
 << go / build / main / debug
 	test "${#}" -eq 0
-	exec -- "${X_RUN[@]}" ':: go / tool' build \
+	exec -- "${ZRUN}" ':: go / tool' build \
 			-v \
 			-o ./.outputs/main-debug.elf \
 			-- ./sources/main.go \
@@ -15,7 +15,7 @@
 
 << go / build / main / release
 	test "${#}" -eq 0
-	exec -- "${X_RUN[@]}" ':: go / tool' build \
+	exec -- "${ZRUN}" ':: go / tool' build \
 			-v \
 			-ldflags '-s' \
 			-o ./.outputs/main-release.elf \
@@ -27,7 +27,7 @@
 << go / build / main / release / publish
 	test "${#}" -eq 0
 	printf -- '[ii]  building...\n' >&2
-	"${X_RUN[@]}" ':: go / build / main / release'
+	"${ZRUN}" ':: go / build / main / release'
 	if test ! -e ./.outputs/publish ; then
 		mkdir -- ./.outputs/publish
 	fi
@@ -67,14 +67,14 @@
 
 
 << go / execute / main
-	"${X_RUN[@]}" ':: go / build / main / debug'
+	"${ZRUN}" ':: go / build / main / debug'
 	exec -- ./.outputs/main-debug.elf "${@}"
 	exit -- 1
 !!
 
 
 << go / execute / main / udp + stdout-only / rfc5424
-	"${X_RUN[@]}" ':: go / build / main / debug'
+	"${ZRUN}" ':: go / build / main / debug'
 	exec -- ./.outputs/main-debug.elf \
 			--input-syslog-listen-udp 127.35.195.99:8514 \
 			--input-syslog-format rfc5424 \
@@ -88,7 +88,7 @@
 !!
 
 << go / execute / main / udp + stdout-only / rfc3164
-	"${X_RUN[@]}" ':: go / build / main / debug'
+	"${ZRUN}" ':: go / build / main / debug'
 	exec -- ./.outputs/main-debug.elf \
 			--input-syslog-listen-udp 127.35.195.99:8514 \
 			--input-syslog-format rfc3164 \
@@ -102,7 +102,7 @@
 !!
 
 << go / execute / main / http + stdout-only
-	"${X_RUN[@]}" ':: go / build / main / debug'
+	"${ZRUN}" ':: go / build / main / debug'
 	exec -- ./.outputs/main-debug.elf \
 			--input-http-listen-tcp 127.35.195.99:8080 \
 			--input-http-json=true \
@@ -116,7 +116,7 @@
 
 
 << go / execute / main / udp + stdout-only + jq / replace / rfc5424
-	"${X_RUN[@]}" ':: go / build / main / debug'
+	"${ZRUN}" ':: go / build / main / debug'
 	_jq_script='
 			
 			if (.application == "haproxy") then
@@ -150,7 +150,7 @@
 !!
 
 << go / execute / main / udp + stdout-only + jq / extend / rfc5424
-	"${X_RUN[@]}" ':: go / build / main / debug'
+	"${ZRUN}" ':: go / build / main / debug'
 	_jq_script='
 			
 			if (.application == "haproxy") then
@@ -180,7 +180,7 @@
 
 
 << go / execute / main / udp + file-only / rfc5424
-	"${X_RUN[@]}" ':: go / build / main / debug'
+	"${ZRUN}" ':: go / build / main / debug'
 	exec -- ./.outputs/main-debug.elf \
 			--input-syslog-listen-udp 127.35.195.99:8514 \
 			--input-syslog-format rfc5424 \
@@ -371,7 +371,7 @@
 
 << go / dependencies / update
 	test "${#}" -eq 0
-	exec -- "${X_RUN[@]}" ':: go / tool' get -v -d -- ./sources/...
+	exec -- "${ZRUN}" ':: go / tool' get -v -d -- ./sources/...
 	exit -- 1
 !!
 
