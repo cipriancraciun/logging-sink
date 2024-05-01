@@ -30,7 +30,7 @@ import "unicode/utf8"
 import syslog "gopkg.in/mcuadros/go-syslog.v2"
 import syslog_format "gopkg.in/mcuadros/go-syslog.v2/format"
 
-import x2j "github.com/cipriancraciun/goxml2json"
+import x2j "github.com/basgys/goxml2json"
 
 
 
