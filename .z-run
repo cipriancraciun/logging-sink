@@ -5,23 +5,23 @@
 
 << go / build / main / debug
 	test "${#}" -eq 0
+	_outputs="$( exec -- readlink -e -- ./.outputs )"
 	exec -- "${ZRUN}" ':: go / tool' build \
 			-v \
-			-o ./.outputs/main-debug.elf \
-			-- ./sources/main.go \
-		#
-	exit -- 1
+			-o "${_outputs}/main-debug.elf" \
+			-- ./main.go \
+	#
 !!
 
 << go / build / main / release
 	test "${#}" -eq 0
+	_outputs="$( exec -- readlink -e -- ./.outputs )"
 	exec -- "${ZRUN}" ':: go / tool' build \
 			-v \
 			-ldflags '-s' \
-			-o ./.outputs/main-release.elf \
-			-- ./sources/main.go \
-		#
-	exit -- 1
+			-o "${_outputs}/main-release.elf" \
+			-- ./main.go \
+	#
 !!
 
 << go / build / main / release / publish
@@ -53,14 +53,12 @@
 		< ./.outputs/main-release.elf \
 		>| ./.outputs/publish/bin/sink.elf.xz \
 	#
-	exit -- 0
 !!
 
 << publish
 	test "${#}" -eq 0
-	printf -- '[ii]  publishing to `https://data.volution.ro/ciprian/feb285596a999a6e31a790700a0d5db1`...\n' >&2
+	printf -- '[ii]  publishing to `https://data.volution.ro/ciprian/feb285596a999a6e31a790700a0d5db1/`...\n' >&2
 	exec -- rsync -a -v -- ./.outputs/publish/ ./.publish/
-	exit -- 1
 !!
 
 
@@ -69,54 +67,46 @@
 << go / execute / main
 	"${ZRUN}" ':: go / build / main / debug'
 	exec -- ./.outputs/main-debug.elf "${@}"
-	exit -- 1
 !!
 
 
 << go / execute / main / udp + stdout-only / rfc5424
-	"${ZRUN}" ':: go / build / main / debug'
-	exec -- ./.outputs/main-debug.elf \
-			--input-syslog-listen-udp 127.35.195.99:8514 \
+	exec -- "${ZRUN}" ':: go / execute / main' \
+			--input-syslog-listen-udp 127.35.195.99:9514 \
 			--input-syslog-format rfc5424 \
 			--input-syslog-json=true \
 			--output-stdout-json-pretty=true \
 			--parser-message-raw=false \
 			--report-timeout 6s \
 			"${@}" \
-		#
-	exit -- 1
+	#
 !!
 
 << go / execute / main / udp + stdout-only / rfc3164
-	"${ZRUN}" ':: go / build / main / debug'
-	exec -- ./.outputs/main-debug.elf \
-			--input-syslog-listen-udp 127.35.195.99:8514 \
+	exec -- "${ZRUN}" ':: go / execute / main' \
+			--input-syslog-listen-udp 127.35.195.99:9514 \
 			--input-syslog-format rfc3164 \
 			--input-syslog-json=true \
 			--output-stdout-json-pretty=true \
 			--parser-message-raw=false \
 			--report-timeout 6s \
 			"${@}" \
-		#
-	exit -- 1
+	#
 !!
 
 << go / execute / main / http + stdout-only
-	"${ZRUN}" ':: go / build / main / debug'
-	exec -- ./.outputs/main-debug.elf \
+	exec -- "${ZRUN}" ':: go / execute / main' \
 			--input-http-listen-tcp 127.35.195.99:8080 \
 			--input-http-json=true \
 			--output-stdout-json-pretty=true \
 			--parser-message-raw=false \
 			--report-timeout 6s \
 			"${@}" \
-		#
-	exit -- 1
+	#
 !!
 
 
 << go / execute / main / udp + stdout-only + jq / replace / rfc5424
-	"${ZRUN}" ':: go / build / main / debug'
 	_jq_script='
 			
 			if (.application == "haproxy") then
@@ -134,8 +124,8 @@
 			end
 			
 		'
-	exec -- ./.outputs/main-debug.elf \
-			--input-syslog-listen-udp 127.35.195.99:8514 \
+	exec -- "${ZRUN}" ':: go / execute / main' \
+			--input-syslog-listen-udp 127.35.195.99:9514 \
 			--input-syslog-format rfc5424 \
 			--input-syslog-json=true \
 			--output-stdout-json-pretty=true \
@@ -145,12 +135,10 @@
 			--parser-external-replace=true \
 			--report-timeout 6s \
 			"${@}" \
-		#
-	exit -- 1
+	#
 !!
 
 << go / execute / main / udp + stdout-only + jq / extend / rfc5424
-	"${ZRUN}" ':: go / build / main / debug'
 	_jq_script='
 			
 			if (.application == "haproxy") then
@@ -163,8 +151,8 @@
 			end
 			
 		'
-	exec -- ./.outputs/main-debug.elf \
-			--input-syslog-listen-udp 127.35.195.99:8514 \
+	exec -- "${ZRUN}" ':: go / execute / main' \
+			--input-syslog-listen-udp 127.35.195.99:9514 \
 			--input-syslog-format rfc5424 \
 			--input-syslog-json=true \
 			--output-stdout-json-pretty=true \
@@ -174,15 +162,13 @@
 			--parser-external-replace=false \
 			--report-timeout 6s \
 			"${@}" \
-		#
-	exit -- 1
+	#
 !!
 
 
 << go / execute / main / udp + file-only / rfc5424
-	"${ZRUN}" ':: go / build / main / debug'
-	exec -- ./.outputs/main-debug.elf \
-			--input-syslog-listen-udp 127.35.195.99:8514 \
+	exec -- "${ZRUN}" ':: go / execute / main' \
+			--input-syslog-listen-udp 127.35.195.99:9514 \
 			--input-syslog-format rfc5424 \
 			--input-syslog-json=true \
 			--output-stdout=false \
@@ -196,8 +182,7 @@
 			--parser-message-raw=true \
 			--report-timeout 6s \
 			"${@}" \
-		#
-	exit -- 1
+	#
 !!
 
 
@@ -206,7 +191,7 @@
 << generate / syslog / text / rfc5424
 	test "${#}" -eq 0
 	exec -- logger \
-			--udp --server=127.35.195.99 --port=8514 --size=65535 \
+			--udp --server=127.35.195.99 --port=9514 --size=65535 \
 			--rfc5424 \
 			--tag="test" --msgid="text" --id=959317 \
 			--stderr \
@@ -217,13 +202,12 @@
 			done
 		) \
 	#
-	exit -- 1
 !!
 
 << generate / syslog / text / rfc3164
 	test "${#}" -eq 0
 	exec -- logger \
-			--udp --server=127.35.195.99 --port=8514 --size=65535 \
+			--udp --server=127.35.195.99 --port=9514 --size=65535 \
 			--rfc3164 \
 			--tag="test" --msgid="text" --id=959317 \
 			--stderr \
@@ -234,14 +218,13 @@
 			done
 		) \
 	#
-	exit -- 1
 !!
 
 
 << generate / syslog / json / rfc5424
 	test "${#}" -eq 0
 	exec -- logger \
-			--udp --server=127.35.195.99 --port=8514 --size=65535 \
+			--udp --server=127.35.195.99 --port=9514 --size=65535 \
 			--rfc5424 \
 			--tag="test" --msgid="json" --id=959317 \
 			--stderr \
@@ -252,13 +235,12 @@
 			done
 		) \
 	#
-	exit -- 1
 !!
 
 << generate / syslog / json / rfc3164
 	test "${#}" -eq 0
 	exec -- logger \
-			--udp --server=127.35.195.99 --port=8514 --size=65535 \
+			--udp --server=127.35.195.99 --port=9514 --size=65535 \
 			--rfc3164 \
 			--tag="test" --msgid="json" --id=959317 \
 			--stderr \
@@ -269,7 +251,6 @@
 			done
 		) \
 	#
-	exit -- 1
 !!
 
 
@@ -292,7 +273,6 @@
 		#
 		sleep -- 1s
 	done
-	exit -- 1
 !!
 
 
@@ -313,7 +293,6 @@
 		#
 		sleep -- 1s
 	done
-	exit -- 1
 !!
 
 
@@ -334,7 +313,6 @@
 		#
 		sleep -- 1s
 	done
-	exit -- 1
 !!
 
 
@@ -355,7 +333,6 @@
 		#
 		sleep -- 1s
 	done
-	exit -- 1
 !!
 
 
@@ -363,7 +340,7 @@
 
 << socat / udp
 	test "${#}" -eq 0
-	exec -- socat -u udp-listen:8514,bind=127.35.195.99,reuseaddr stdout
+	exec -- socat -u udp-listen:9514,bind=127.35.195.99,reuseaddr stdout
 !!
 
 
@@ -371,8 +348,9 @@
 
 << go / dependencies / update
 	test "${#}" -eq 0
-	exec -- "${ZRUN}" ':: go / tool' get -v -d -- ./sources/...
-	exit -- 1
+	"${ZRUN}" ':: go / tool' get -v -d -u -- all
+	"${ZRUN}" ':: go / tool' mod tidy
+	"${ZRUN}" ':: go / tool' mod verify
 !!
 
 
@@ -385,10 +363,10 @@
 	test -d ./.outputs
 	_outputs="$( exec -- readlink -e -- ./.outputs )"
 	
+	cd -- ./sources
+	
 	export -- GOPATH="${_outputs}/go"
 	exec -- go "${@}"
-	
-	exit -- 1
 !!
 
 
@@ -397,7 +375,6 @@
 << sources / grep / codes
 	test "${#}" -eq 0
 	grep -o -P -e '(?<=\[)[0-9a-f]{8}(?=\])' -h -r . --include '*.go' | sort | uniq -d
-	exit -- 0
 !!
 
 
@@ -417,8 +394,6 @@
 	_outputs_store="$( exec -- readlink -e -- "${_outputs_store}" )"
 	
 	ln -s -f -T -- "${_outputs_store}" ./.outputs
-	
-	exit -- 0
 !!
 
 
@@ -434,7 +409,5 @@
 	mkdir -- ./.outputs/logs
 	
 	ln -s -f -T -- ./.outputs/logs ./.logs
-	
-	exit -- 0
 !!
 
