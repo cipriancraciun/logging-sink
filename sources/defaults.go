@@ -13,7 +13,7 @@ const DefaultInputSyslogIdentifier = ""
 const DefaultInputSyslogListenTcp = ""
 const DefaultInputSyslogListenUdp = ""
 const DefaultInputSyslogListenUnix = ""
-const DefaultInputSyslogTimeout = 6 * time.Second
+const DefaultInputSyslogTimeout = 6 * time.Second // TODO
 const DefaultInputSyslogFormat = "rfc3164"
 const DefaultInputSyslogParseJson = false
 const DefaultInputSyslogDebug = false
@@ -21,7 +21,7 @@ const DefaultInputSyslogDebug = false
 const DefaultInputHttpEnabled = false
 const DefaultInputHttpIdentifier = ""
 const DefaultInputHttpListenTcp = ""
-const DefaultInputHttpTimeout = 6 * time.Second
+const DefaultInputHttpTimeout = 6 * time.Second // TODO
 const DefaultInputHttpAllowedPath = ""
 const DefaultInputHttpParseJson = false
 const DefaultInputHttpParseXml = false
@@ -63,23 +63,23 @@ const DefaultOutputFileTimeout = 1 * time.Hour
 const DefaultOutputFileJsonPretty = false
 const DefaultOutputFileJsonSequence = true
 const DefaultOutputFileFlush = true
-const DefaultOutputFileStoreMode = 0750
-const DefaultOutputFileFileMode = 0640
-const DefaultOutputFileTickerInterval = 6 * time.Second
+const DefaultOutputFileStoreMode = 0750 // TODO
+const DefaultOutputFileFileMode = 0640 // TODO
+const DefaultOutputFileTickerInterval = 6 * time.Second // TODO
 const DefaultOutputFileQueueSize = 16 * 1024
 const DefaultOutputFileDebug = false
 
-const DefaultOutputBufferSize = 16 * 1024
+const DefaultOutputBufferSize = 16 * 1024 // TODO
+
+const DefaultDequeueTickerInterval = 6 * time.Second // TODO
+const DefaultDequeueReportInterval = 60 * time.Second
+const DefaultDequeueReportCounter = 1000
+const DefaultDequeueDebug = false // TODO
 
 const DefaultParserMessageRaw = true
 const DefaultParserMessageSha256 = true
 const DefaultParserExternalReplace = false
 const DefaultParserDebug = false
-
-const DefaultDequeueTickerInterval = 6 * time.Second
-const DefaultDequeueReportInterval = 60 * time.Second
-const DefaultDequeueReportCounter = 1000
-const DefaultDequeueDebug = false
 
 const DefaultMessagesQueueSize = 16 * 1024
 const DefaultSignalsQueueSize = 16
