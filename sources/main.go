@@ -980,7 +980,6 @@ func (_context_0 *InputSyslogHandler) Handle (_message syslog_format.LogParts, _
 }
 
 
-
 func inputSyslogProcess (_context *InputSyslogContext, _syslogMessage syslog_format.LogParts) (error) {
 	
 	_configuration := _context.configuration
@@ -1351,7 +1350,7 @@ func (_context_0 *InputHttpHandler) ServeHTTP (_response http.ResponseWriter, _r
 		_response.WriteHeader (200)
 		_response.Write ([]byte ("OK\n"))
 	} else {
-		logError (_error, "[61095a98]  input http failed to process message;  ignoring!\n")
+		logError (_error, "[61095a98]  input http failed to process message;  ignoring!")
 		_response.Header () ["Content-Type"] = []string { "text/plain" }
 		_response.WriteHeader (500)
 		_response.Write ([]byte ("NOK\n"))
@@ -1446,7 +1445,7 @@ func inputHttpProcess (_context *InputHttpContext, _request *http.Request) (erro
 		switch _messageContentType {
 			
 			case "text/plain" :
-				;
+				{} // NOP
 			
 			case "application/json" :
 				if _configuration.ParseJson {
@@ -3054,7 +3053,7 @@ func main () () {
 func logError (_error error, _message string) () {
 	
 	if _message == "" {
-		_message = "[906eea03]  unexpected error encountered!";
+		_message = "[906eea03]  unexpected error encountered!"
 	}
 	log.Printf ("[ee] %s\n", _message)
 	
