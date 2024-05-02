@@ -47,7 +47,6 @@ const DefaultInputSyslogListenUnix = ""
 const DefaultInputSyslogTimeout = 6 * time.Second
 const DefaultInputSyslogFormat = "rfc3164"
 const DefaultInputSyslogParseJson = false
-const DefaultInputSyslogQueueSize = 16 * 1024
 const DefaultInputSyslogDebug = false
 
 const DefaultInputHttpEnabled = false
@@ -57,7 +56,6 @@ const DefaultInputHttpTimeout = 6 * time.Second
 const DefaultInputHttpAllowedPath = ""
 const DefaultInputHttpParseJson = false
 const DefaultInputHttpParseXml = false
-const DefaultInputHttpQueueSize = 16 * 1024
 const DefaultInputHttpDebug = false
 
 const DefaultInputMqttEnabled = false
@@ -114,6 +112,7 @@ const DefaultDequeueReportInterval = 60 * time.Second
 const DefaultDequeueReportCounter = 1000
 const DefaultDequeueDebug = false
 
+const DefaultMessagesQueueSize = 16 * 1024
 const DefaultSignalsQueueSize = 16
 const DefaultGlobalDebug = false
 
@@ -231,7 +230,6 @@ type InputSyslogConfiguration struct {
 	FormatName string
 	FormatParser syslog_format.Format
 	ParseJson bool
-	QueueSize uint
 	Debug bool
 }
 
@@ -258,7 +256,6 @@ type InputHttpConfiguration struct {
 	AllowedPath string
 	ParseJson bool
 	ParseXml bool
-	QueueSize uint
 	Debug bool
 }
 
@@ -440,6 +437,7 @@ type Configuration struct {
 	Dequeue *DequeueConfiguration
 	Parser *ParserConfiguration
 	
+	MessagesQueueSize uint
 	Debug bool
 }
 
@@ -457,7 +455,6 @@ func configure (_arguments []string) (*Configuration, error) {
 	_inputSyslogListenUnix := _flags.String ("input-syslog-listen-unix", DefaultInputSyslogListenUnix, "<path>")
 	_inputSyslogFormatName := _flags.String ("input-syslog-format", DefaultInputSyslogFormat, "rfc3164 | rfc5424")
 	_inputSyslogParseJson := _flags.Bool ("input-syslog-json", DefaultInputSyslogParseJson, "true | false")
-	_inputSyslogQueueSize := _flags.Uint ("input-syslog-queue", DefaultInputSyslogQueueSize, "<size>")
 	_inputSyslogDebug := _flags.Bool ("input-syslog-debug", DefaultInputSyslogDebug, "true | false")
 	
 	_inputHttpEnabled := _flags.Bool ("input-http", DefaultInputHttpEnabled, "true | false")
@@ -466,7 +463,6 @@ func configure (_arguments []string) (*Configuration, error) {
 	_inputHttpAllowedPath := _flags.String ("input-http-allowed-path", DefaultInputHttpAllowedPath, "<path>")
 	_inputHttpParseJson := _flags.Bool ("input-http-json", DefaultInputHttpParseJson, "true | false")
 	_inputHttpParseXml := _flags.Bool ("input-http-xml", DefaultInputHttpParseXml, "true | false")
-	_inputHttpQueueSize := _flags.Uint ("input-http-queue", DefaultInputHttpQueueSize, "<size>")
 	_inputHttpDebug := _flags.Bool ("input-http-debug", DefaultInputHttpDebug, "true | false")
 	
 	_inputMqttEnabled := _flags.Bool ("input-mqtt", DefaultInputMqttEnabled, "true | false")
@@ -518,6 +514,8 @@ func configure (_arguments []string) (*Configuration, error) {
 	_parserExternalReplace := _flags.Bool ("parser-external-replace", DefaultParserExternalReplace, "true | false")
 	_parserDebug := _flags.Bool ("parser-debug", DefaultParserDebug, "true | false")
 	
+	_messagesQueueSize := _flags.Uint ("messages-queue", DefaultMessagesQueueSize, "<size>")
+	
 	_forcedDebug := _flags.Bool ("debug", false, "true | false")
 	
 	_globalDebug := DefaultGlobalDebug || *_forcedDebug
@@ -555,7 +553,6 @@ func configure (_arguments []string) (*Configuration, error) {
 				FormatName : *_inputSyslogFormatName,
 				FormatParser : _inputSyslogFormatParser,
 				ParseJson : *_inputSyslogParseJson,
-				QueueSize : *_inputSyslogQueueSize,
 				Debug : *_inputSyslogDebug || *_forcedDebug,
 			}
 		_globalDebug = _globalDebug || _inputSyslogConfiguration.Debug
@@ -574,7 +571,6 @@ func configure (_arguments []string) (*Configuration, error) {
 				AllowedPath : *_inputHttpAllowedPath,
 				ParseJson : *_inputHttpParseJson,
 				ParseXml : *_inputHttpParseXml,
-				QueueSize : *_inputHttpQueueSize,
 				Debug : *_inputHttpDebug || *_forcedDebug,
 			}
 		_globalDebug = _globalDebug || _inputHttpConfiguration.Debug
@@ -760,6 +756,7 @@ func configure (_arguments []string) (*Configuration, error) {
 			OutputFile : _outputFileConfiguration,
 			Dequeue : _dequeueConfiguration,
 			Parser : _parserConfiguration,
+			MessagesQueueSize : *_messagesQueueSize,
 			Debug : _globalDebug,
 		}
 	
@@ -2872,12 +2869,7 @@ func main_0 () (error) {
 		log.Printf ("[ii] [e1603153]  initializing services...\n")
 	}
 	
-	var _inputQueueSize uint = DefaultInputSyslogQueueSize
-	if _configuration.InputSyslog != nil {
-		_inputQueueSize = _configuration.InputSyslog.QueueSize
-	}
-	
-	_inputQueue := make (chan *CollectorMessage, _inputQueueSize)
+	_inputQueue := make (chan *CollectorMessage, _configuration.MessagesQueueSize)
 	_outputQueues := make ([] chan<- *Message, 0)
 	
 	_mainSignalsQueue := make (chan os.Signal, DefaultSignalsQueueSize)
