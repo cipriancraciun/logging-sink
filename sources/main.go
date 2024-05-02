@@ -46,7 +46,7 @@ const DefaultInputSyslogListenUdp = ""
 const DefaultInputSyslogListenUnix = ""
 const DefaultInputSyslogTimeout = 6 * time.Second
 const DefaultInputSyslogFormat = "rfc3164"
-const DefaultInputSyslogParseJson = true
+const DefaultInputSyslogParseJson = false
 const DefaultInputSyslogQueueSize = 16 * 1024
 const DefaultInputSyslogDebug = false
 
@@ -55,8 +55,8 @@ const DefaultInputHttpIdentifier = ""
 const DefaultInputHttpListenTcp = ""
 const DefaultInputHttpTimeout = 6 * time.Second
 const DefaultInputHttpAllowedPath = ""
-const DefaultInputHttpParseJson = true
-const DefaultInputHttpParseXml = true
+const DefaultInputHttpParseJson = false
+const DefaultInputHttpParseXml = false
 const DefaultInputHttpQueueSize = 16 * 1024
 const DefaultInputHttpDebug = false
 
@@ -69,7 +69,7 @@ const DefaultInputMqttUsername = ""
 const DefaultInputMqttPassword = ""
 const DefaultInputMqttKeepAlive = 30
 const DefaultInputMqttCleanSession = false
-const DefaultInputMqttParseJson = true
+const DefaultInputMqttParseJson = false
 const DefaultInputMqttDebug = false
 
 const DefaultOutputStdoutEnabled = true
