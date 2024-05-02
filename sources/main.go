@@ -24,6 +24,7 @@ import "path/filepath"
 import "regexp"
 import "strings"
 import "sync"
+import "sync/atomic"
 import "syscall"
 import "time"
 import "unicode/utf8"
@@ -1657,6 +1658,8 @@ func inputMqttLooper (_context *InputMqttContext) (error) {
 		log.Printf ("[ii] [e4813408]  input mqtt started;\n")
 	}
 	
+	var _subscribed atomic.Bool
+	
 	go func () () {
 		for {
 			if _configuration.Debug {
@@ -1671,43 +1674,63 @@ func inputMqttLooper (_context *InputMqttContext) (error) {
 					logError (_error, "[9df3af2c]  input mqtt failed to process message;  ignoring!")
 				}
 			} else if _error == mqtt.ErrClosed {
-				break;
+				return
 			} else {
-				logError (_error, "[63f050f6]  input mqtt failed to receive message;  ignoring!")
+				logError (_error, "[63f050f6]  input mqtt failed to receive message;  retrying!")
+				_subscribed.Store (false)
 				time.Sleep (1 * time.Second)
 			}
 		}
 	} ()
 	
 	go func () () {
-		_clientTopics := []string { _configuration.Topic }
-		time.Sleep (100 * time.Millisecond)
-		_cancelation := context.Background ()
-		if _configuration.Debug {
-			log.Printf ("[ii] [8981a020]  input mqtt subscribing...\n")
-		}
-		if _error := _client.Subscribe (_cancelation.Done (), _clientTopics ...); (_error != nil) && (_error != mqtt.ErrClosed) {
-			logError (_error, "[bcefba57]  input mqtt failed to subscribe;  aborting!")
-			_client.Close ()
-			return
-		}
-		if _configuration.Debug {
-			log.Printf ("[ii] [6bcb805b]  input mqtt subscribed;\n")
-		}
-	} ()
-	
-	go func () () {
 		for {
-			time.Sleep (1000 * time.Millisecond)
-			_cancelation := context.Background ()
-			if _configuration.Debug {
-				log.Printf ("[ii] [e4cd88ca]  input mqtt pinging...\n")
+			for {
+				_clientTopics := []string { _configuration.Topic }
+				time.Sleep (100 * time.Millisecond)
+				_cancelation := context.Background ()
+				if _configuration.Debug {
+					for _, _clientTopic := range _clientTopics {
+						log.Printf ("[ii] [8981a020]  input mqtt subscribing with `%s`...\n", _clientTopic)
+					}
+				}
+				_subscribed.Store (true)
+				if _error := _client.SubscribeLimitAtLeastOnce (_cancelation.Done (), _clientTopics ...); _error == nil {
+					if _configuration.Debug {
+						log.Printf ("[ii] [6bcb805b]  input mqtt subscribed;\n")
+					}
+					break
+				} else if _error == mqtt.ErrClosed {
+					return
+				} else {
+					logError (_error, "[bcefba57]  input mqtt failed to subscribe;  retrying!")
+					continue
+				}
 			}
-			if _error := _client.Ping (_cancelation.Done ()); (_error != nil) && (_error != mqtt.ErrClosed) {
-				logError (_error, "[4859935a]  input mqtt failed to ping;  ignoring!")
-			}
-			if _configuration.Debug {
-				log.Printf ("[ii] [e2038eb6]  input mqtt pinged;\n")
+			for {
+				if ! _subscribed.Load () {
+					break
+				}
+				time.Sleep (1000 * time.Millisecond)
+				if ! _subscribed.Load () {
+					break
+				}
+				_cancelation := context.Background ()
+				if _configuration.Debug {
+					log.Printf ("[ii] [e4cd88ca]  input mqtt pinging...\n")
+				}
+				if _error := _client.Ping (_cancelation.Done ()); _error == nil {
+					if _configuration.Debug {
+						log.Printf ("[ii] [e2038eb6]  input mqtt pinged;\n")
+					}
+					continue
+				} else if _error == mqtt.ErrClosed {
+					return
+				} else {
+					logError (_error, "[4859935a]  input mqtt failed to ping;  retrying!")
+					_subscribed.Store (false)
+					break
+				}
 			}
 		}
 	} ()
