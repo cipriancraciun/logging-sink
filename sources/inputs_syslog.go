@@ -299,7 +299,7 @@ func inputSyslogProcess (_context *InputSyslogContext, _syslogMessage syslog_for
 		_messageText_0 := strings.TrimSpace (_messageText)
 		if strings.HasPrefix (_messageText_0, "{") && strings.HasSuffix (_messageText_0, "}") {
 			if _error := json.Unmarshal ([]byte (_messageText_0), &_messageJson); _error == nil {
-				_messageText = ""
+				// NOP
 			}
 		}
 	}

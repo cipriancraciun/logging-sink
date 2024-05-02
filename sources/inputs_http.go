@@ -306,7 +306,7 @@ func inputHttpProcess (_context *InputHttpContext, _request *http.Request) (erro
 			case "application/json" :
 				if _configuration.ParseJson {
 					if _error := json.Unmarshal ([]byte (_messageText), &_messageJson); _error == nil {
-						_messageText = ""
+						// NOP
 					} else {
 						logError (_error, "[fb140c77]  input http failed accepting body:  invalid JSON format;  ignoring and aborting parsing!")
 						_messageParseable = false
@@ -318,7 +318,6 @@ func inputHttpProcess (_context *InputHttpContext, _request *http.Request) (erro
 					_messageReader := strings.NewReader (_messageText)
 					if _buffer, _error := x2j.Convert (_messageReader, x2j.WithTypeConverter (x2j.Null, x2j.Bool, x2j.Int, x2j.Float, x2j.String)); _error == nil {
 						if (_buffer.Len () != 0) && (_buffer.String () != "\"\"\n") {
-							_messageText = ""
 							_messageJson = _buffer.Bytes ()
 						} else {
 							log.Printf ("[ee] [01c85ada]  input http failed accepting body:  invalid XML format;  ignoring and aborting parsing!")

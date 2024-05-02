@@ -286,7 +286,7 @@ func inputMqttProcess (_context *InputMqttContext, _topicRaw []byte, _messageRaw
 		_messageText_0 := strings.TrimSpace (_messageText)
 		if strings.HasPrefix (_messageText_0, "{") && strings.HasSuffix (_messageText_0, "}") {
 			if _error := json.Unmarshal ([]byte (_messageText_0), &_messageJson); _error == nil {
-				_messageText = ""
+				// NOP
 			}
 		}
 	}

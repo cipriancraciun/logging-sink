@@ -123,6 +123,9 @@ func parserProcess (_context *ParserContext, _collectorMessage *CollectorMessage
 	}
 	
 	if _message != nil {
+		if _message.MessageJson != nil {
+			_message.MessageText = ""
+		}
 		if ! _configuration.MessageRaw && ((_message.MessageText != "") || (_message.MessageJson != nil)) {
 			_message.MessageRaw = nil
 		}
