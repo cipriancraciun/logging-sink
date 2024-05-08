@@ -9,7 +9,7 @@
 	exec -- "${ZRUN}" ':: go / tool' build \
 			-v \
 			-o "${_outputs}/main-debug.elf" \
-			-- ./main.go \
+			-- . \
 	#
 !!
 
@@ -20,7 +20,7 @@
 			-v \
 			-ldflags '-s' \
 			-o "${_outputs}/main-release.elf" \
-			-- ./main.go \
+			-- . \
 	#
 !!
 
@@ -67,6 +67,13 @@
 << go / execute / main
 	"${ZRUN}" ':: go / build / main / debug'
 	exec -- ./.outputs/main-debug.elf "${@}"
+!!
+
+
+<< go / execute / main / help
+	exec -- "${ZRUN}" ':: go / execute / main' \
+			--help \
+	#
 !!
 
 
@@ -181,6 +188,23 @@
 			--output-file-timeout 6s \
 			--parser-message-raw=true \
 			--report-timeout 6s \
+			"${@}" \
+	#
+!!
+
+
+<< go / execute / main / mqtt + stdout-only
+	exec -- "${ZRUN}" ':: go / execute / main' \
+			--input-mqtt-connect-tcp "${_MQTT_INPUT_IP}:${_MQTT_INPUT_PORT}" \
+			--input-mqtt-client 'logging-sink' \
+			--input-mqtt-topic 'tests/date' \
+			--input-mqtt-keep-alive 30 \
+			--input-mqtt-clean-session=true \
+			--input-mqtt-json=true \
+			--output-stdout-json-pretty=true \
+			--parser-message-raw=false \
+			--report-timeout 60s \
+			--report-messages 1000000 \
 			"${@}" \
 	#
 !!
