@@ -171,7 +171,7 @@ func inputMqttLooper (_context *InputMqttContext) (error) {
 			} else {
 				logError (_error, "[63f050f6]  input mqtt failed to receive message;  retrying!")
 				_subscribed.Store (false)
-				time.Sleep (1 * time.Second)
+				time.Sleep (DefaultInputMqttRetry)
 			}
 		}
 	} ()
@@ -204,7 +204,7 @@ func inputMqttLooper (_context *InputMqttContext) (error) {
 				if ! _subscribed.Load () {
 					break
 				}
-				time.Sleep (1000 * time.Millisecond)
+				time.Sleep (DefaultInputMqttPing)
 				if ! _subscribed.Load () {
 					break
 				}
