@@ -1,0 +1,451 @@
+#!/dev/null
+
+
+
+
+::// examples / ...
+::// watch / examples / ...
+::// use / examples / ...
+
+
+
+
+
+
+
+
+<< examples / exec
+	exec -- "${ZRUN}" ':: run / exec' \
+			\
+			--input-syslog-json=true \
+			--input-http-json=true \
+			--input-http-xml=true \
+			--input-mqtt-json=true \
+			\
+			--output-stdout=false \
+			--output-stdout-json-pretty=true \
+			\
+			--input-mqtt-keep-alive 30 \
+			--input-mqtt-clean-session=true \
+			--output-mqtt-keep-alive 30 \
+			--output-mqtt-clean-session=true \
+			\
+			--parser-message-raw=false \
+			--report-timeout 6s \
+			\
+			"${@}" \
+	#
+!!
+
+
+
+
+
+
+
+
+<< examples / sink / from-syslog + to-stdout / rfc5424
+	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-syslog-listen-udp "${_SYSLOG_INPUT_IP}:${_SYSLOG_INPUT_PORT}" \
+			--input-syslog-format rfc5424 \
+			--output-stdout=true \
+			"${@}" \
+	#
+!!
+
+
+<< examples / sink / from-syslog + to-stdout / rfc3164
+	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-syslog-listen-udp "${_SYSLOG_INPUT_IP}:${_SYSLOG_INPUT_PORT}" \
+			--input-syslog-format rfc3164 \
+			--output-stdout=true \
+			"${@}" \
+	#
+!!
+
+
+
+
+
+
+
+
+<< examples / sink / from-http + to-stdout
+	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-http-listen-tcp "${_HTTP_INPUT_IP}:${_HTTP_INPUT_PORT}" \
+			--output-stdout=true \
+			"${@}" \
+	#
+!!
+
+
+
+
+
+
+
+
+<< examples / sink / from-syslog + to-file / rfc5424
+	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-syslog-listen-udp "${_SYSLOG_INPUT_IP}:${_SYSLOG_INPUT_PORT}" \
+			--input-syslog-format rfc5424 \
+			--output-file-current-symlink "${_FILE_OUTPUT_LOGS}/tail" \
+			--output-file-current-store "${_FILE_OUTPUT_LOGS}/current" \
+			--output-file-archived-store "${_FILE_OUTPUT_LOGS}/archived" \
+			--output-file-archived-compress "${_FILE_OUTPUT_COMPRESSION}" \
+			--output-file-json-pretty=false \
+			--output-file-messages 6 \
+			--output-file-timeout 6s \
+			"${@}" \
+	#
+!!
+
+
+
+
+
+
+
+
+<< examples / sink / from-syslog + to-stdout + jq-replace / rfc5424
+	_jq_script='
+			
+			if (.application == "haproxy") then
+				.message_extra = {
+					request_id : .message_json.h_r_i,
+					session_id : .message_json.h_s_i,
+				}
+				| if (.message_extra.request_id[0:1] >= "4") then
+					.message_json = .message_extra
+					| del (.message_extra)
+					| del (.message_raw)
+				else null end
+			else
+				null
+			end
+			
+		'
+	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-syslog-listen-udp "${_SYSLOG_INPUT_IP}:${_SYSLOG_INPUT_PORT}" \
+			--input-syslog-format rfc5424 \
+			--parser-external-command 'jq --unbuffered @{script}' \
+			--parser-external-script "${_jq_script}" \
+			--parser-external-replace=true \
+			--output-stdout=true \
+			"${@}" \
+	#
+!!
+
+
+
+
+<< examples / sink / from-syslog + to-stdout + jq-extend / rfc5424
+	_jq_script='
+			
+			if (.application == "haproxy") then
+				{
+					request_id : .message_json.h_r_i,
+					session_id : .message_json.h_s_i,
+				}
+			else
+				null
+			end
+			
+		'
+	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-syslog-listen-udp "${_SYSLOG_INPUT_IP}:${_SYSLOG_INPUT_PORT}" \
+			--input-syslog-format rfc5424 \
+			--parser-external-command 'jq --unbuffered @{script}' \
+			--parser-external-script "${_jq_script}" \
+			--parser-external-replace=false \
+			--output-stdout=true \
+			"${@}" \
+	#
+!!
+
+
+
+
+
+
+
+
+<< examples / sink / from-mqtt + to-stdout
+	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-mqtt-connect-tcp "${_MQTT_INPUT_IP}:${_MQTT_INPUT_PORT}" \
+			--input-mqtt-client "${_MQTT_INPUT_CLIENT}" \
+			--input-mqtt-topic "${_MQTT_INPUT_TOPIC}" \
+			--output-stdout=true \
+			"${@}" \
+	#
+!!
+
+
+<< examples / sink / from-syslog + to-mqtt / rfc5424
+	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-syslog-listen-udp "${_SYSLOG_INPUT_IP}:${_SYSLOG_INPUT_PORT}" \
+			--input-syslog-format rfc5424 \
+			--output-mqtt-connect-tcp "${_MQTT_OUTPUT_IP}:${_MQTT_OUTPUT_PORT}" \
+			--output-mqtt-client "${_MQTT_OUTPUT_CLIENT}" \
+			--output-mqtt-topic "${_MQTT_OUTPUT_TOPIC}" \
+			"${@}" \
+	#
+!!
+
+
+<< examples / sink / from-syslog + to-mqtt / rfc3164
+	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-syslog-listen-udp "${_SYSLOG_INPUT_IP}:${_SYSLOG_INPUT_PORT}" \
+			--input-syslog-format rfc3164 \
+			--output-mqtt-connect-tcp "${_MQTT_OUTPUT_IP}:${_MQTT_OUTPUT_PORT}" \
+			--output-mqtt-client "${_MQTT_OUTPUT_CLIENT}" \
+			--output-mqtt-topic "${_MQTT_OUTPUT_TOPIC}" \
+			"${@}" \
+	#
+!!
+
+
+<< examples / sink / from-mqtt + to-mqtt
+	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-mqtt-connect-tcp "${_MQTT_INPUT_IP}:${_MQTT_INPUT_PORT}" \
+			--input-mqtt-client "${_MQTT_INPUT_CLIENT}" \
+			--input-mqtt-topic "${_MQTT_INPUT_TOPIC}" \
+			--output-mqtt-connect-tcp "${_MQTT_OUTPUT_IP}:${_MQTT_OUTPUT_PORT}" \
+			--output-mqtt-client "${_MQTT_OUTPUT_CLIENT}" \
+			--output-mqtt-topic "${_MQTT_OUTPUT_TOPIC}" \
+			"${@}" \
+	#
+!!
+
+
+
+
+
+
+
+
+<< examples / generate / syslog / text / rfc5424
+	test "${#}" -eq 0
+	exec -- logger \
+			--udp --server="${_SYSLOG_INPUT_IP}" --port="${_SYSLOG_INPUT_PORT}" --size=65535 \
+			--rfc5424 \
+			--tag="tests" --msgid="msg-text-rfc5424" --id=959317 \
+			--stderr \
+		< <(
+			while true ; do
+				printf -- '[~~]  message:  %s %s %s %s!\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+				sleep -- 1s
+			done
+		) \
+	#
+!!
+
+
+<< examples / generate / syslog / text / rfc3164
+	test "${#}" -eq 0
+	exec -- logger \
+			--udp --server="${_SYSLOG_INPUT_IP}" --port="${_SYSLOG_INPUT_PORT}" --size=65535 \
+			--rfc3164 \
+			--tag="tests" --msgid="msg-text-rfc3164" --id=959317 \
+			--stderr \
+		< <(
+			while true ; do
+				printf -- '[~~]  message:  %s %s %s %s!\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+				sleep -- 1s
+			done
+		) \
+	#
+!!
+
+
+<< examples / generate / syslog / json / rfc5424
+	test "${#}" -eq 0
+	exec -- logger \
+			--udp --server="${_SYSLOG_INPUT_IP}" --port="${_SYSLOG_INPUT_PORT}" --size=65535 \
+			--rfc5424 \
+			--tag="tests" --msgid="msg-json-rfc5424" --id=959317 \
+			--stderr \
+		< <(
+			while true ; do
+				printf -- '{"a":%s, "b":%s, "c":%s, "d":%s}\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+				sleep -- 1s
+			done
+		) \
+	#
+!!
+
+
+<< examples / generate / syslog / json / rfc3164
+	test "${#}" -eq 0
+	exec -- logger \
+			--udp --server="${_SYSLOG_INPUT_IP}" --port="${_SYSLOG_INPUT_PORT}" --size=65535 \
+			--rfc3164 \
+			--tag="tests" --msgid="msg-json-rfc3164" --id=959317 \
+			--stderr \
+		< <(
+			while true ; do
+				printf -- '{"a":%s, "b":%s, "c":%s, "d":%s}\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+				sleep -- 1s
+			done
+		) \
+	#
+!!
+
+
+
+
+<< examples / generate / http / text
+	test "${#}" -eq 0
+	while true ; do
+		printf -- '[--]\n' >&2
+		curl \
+				-i -s -f \
+				-X POST \
+				-H 'Content-Type: text/plain' \
+				--data-binary @- \
+				--retry 360 --retry-delay 1 --retry-connrefused \
+				-- "http://${_HTTP_INPUT_IP}:${_HTTP_INPUT_PORT}/${_HTTP_INPUT_PATH}" \
+			< <(
+				printf -- '[~~]  message:  %s, %s, %s, %s!\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+			) \
+		#
+		sleep -- 1s
+	done
+!!
+
+
+<< examples / generate / http / json
+	test "${#}" -eq 0
+	while true ; do
+		printf -- '[--]\n' >&2
+		curl \
+				-i -s -f \
+				-X POST \
+				-H 'Content-Type: application/json' \
+				--data-binary @- \
+				--retry 360 --retry-delay 1 --retry-connrefused \
+				-- "http://${_HTTP_INPUT_IP}:${_HTTP_INPUT_PORT}/${_HTTP_INPUT_PATH}" \
+			< <(
+				printf -- '{"a":%s, "b":%s, "c":%s, "d":%s}\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+			) \
+		#
+		sleep -- 1s
+	done
+!!
+
+
+<< examples / generate / http / xml
+	test "${#}" -eq 0
+	while true ; do
+		printf -- '[--]\n' >&2
+		curl \
+				-i -s -f \
+				-X POST \
+				-H 'Content-Type: application/xml' \
+				--data-binary @- \
+				--retry 360 --retry-delay 1 --retry-connrefused \
+				-- "http://${_HTTP_INPUT_IP}:${_HTTP_INPUT_PORT}/${_HTTP_INPUT_PATH}" \
+			< <(
+				printf -- '<test> <a>%s</a> <b>%s</b> <c>%s</c> <d>%s</d> </test>\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+			) \
+		#
+		sleep -- 1s
+	done
+!!
+
+
+
+
+
+
+
+
+<< examples / generate / mqtt / text
+	test "${#}" -eq 0
+	exec -- mosquitto_pub \
+			-h "${_MQTT_INPUT_IP}" -p "${_MQTT_OUTPUT_PORT}" -V 5 \
+			-t "${_MQTT_INPUT_TOPIC}" -q 0 \
+			-l \
+		< <(
+			while true ; do
+				printf -- '[~~]  message:  %s %s %s %s!\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+				sleep -- 1s
+			done
+		) \
+	#
+!!
+
+
+<< examples / generate / mqtt / json
+	test "${#}" -eq 0
+	exec -- mosquitto_pub \
+			-h "${_MQTT_INPUT_IP}" -p "${_MQTT_OUTPUT_PORT}" -V 5 \
+			-t "${_MQTT_INPUT_TOPIC}" -q 0 \
+			-l \
+		< <(
+			while true ; do
+				printf -- '{"a":%s, "b":%s, "c":%s, "d":%s}\n' "${RANDOM}" "${RANDOM}" "${RANDOM}" "${RANDOM}"
+				sleep -- 1s
+			done
+		) \
+	#
+!!
+
+
+
+
+
+
+
+
+<< examples / listen / socat / from-syslog
+	test "${#}" -eq 0
+	exec -- socat \
+			-u \
+			udp-listen:"${_SYSLOG_INPUT_PORT}",bind="${_SYSLOG_INPUT_IP}",reuseaddr \
+			stdout \
+	#
+!!
+
+
+<< examples / listen / from-mqtt
+	test "${#}" -eq 0
+	exec -- mosquitto_sub \
+			-h "${_MQTT_INPUT_IP}" -p "${_MQTT_INPUT_PORT}" -V 5 \
+			-t "${_MQTT_INPUT_TOPIC}" -q 0 \
+			-N -F '%t | id:%m size:%l qos:%q/%r | %p\n' \
+	#
+!!
+
+
+<< examples / listen / to-mqtt
+	test "${#}" -eq 0
+	exec -- mosquitto_sub \
+			-h "${_MQTT_OUTPUT_IP}" -p "${_MQTT_OUTPUT_PORT}" -V 5 \
+			-t "${_MQTT_OUTPUT_TOPIC}" -q 0 \
+			-N -F '%t | id:%m size:%l qos:%q/%r | %p\n' \
+	#
+!!
+
+
+
+
+
+
+
+
+<< workspace / initialize / logs
+	
+	test "${#}" -eq 0
+	
+	if test -d ./.logs ; then
+		exit -- 0
+	fi
+	
+	test -d ./.outputs
+	mkdir -- ./.outputs/logs
+	
+	ln -s -f -T -- ./.outputs/logs ./.logs
+!!
+
+
