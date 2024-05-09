@@ -71,6 +71,20 @@ const DefaultOutputFileTickerInterval = 6 * time.Second // TODO
 const DefaultOutputFileQueueSize = 16 * 1024
 const DefaultOutputFileDebug = false
 
+const DefaultOutputMqttEnabled = false
+const DefaultOutputMqttIdentifier = ""
+const DefaultOutputMqttConnectTcp = ""
+const DefaultOutputMqttRetry = 1 * time.Second // TODO
+const DefaultOutputMqttPing = 30 * time.Second // TODO
+const DefaultOutputMqttTopic = ""
+const DefaultOutputMqttClient = ""
+const DefaultOutputMqttUsername = ""
+const DefaultOutputMqttPassword = ""
+const DefaultOutputMqttKeepAlive = 30
+const DefaultOutputMqttCleanSession = false
+const DefaultOutputMqttQueueSize = 16 * 1024
+const DefaultOutputMqttDebug = false
+
 const DefaultOutputBufferSize = 16 * 1024 // TODO
 
 const DefaultDequeueTickerInterval = 6 * time.Second // TODO

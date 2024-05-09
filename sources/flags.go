@@ -74,6 +74,18 @@ func configure (_arguments []string) (*Configuration, error) {
 	_outputFileQueueSize := _flags.Uint ("output-file-queue", DefaultOutputFileQueueSize, "<size>")
 	_outputFileDebug := _flags.Bool ("output-file-debug", DefaultOutputFileDebug, "true | false")
 	
+	_outputMqttEnabled := _flags.Bool ("output-mqtt", DefaultOutputMqttEnabled, "true | false")
+	_outputMqttIdentifier := _flags.String ("output-mqtt-identifier", DefaultOutputMqttIdentifier, "<identifier>")
+	_outputMqttConnectTcp := _flags.String ("output-mqtt-connect-tcp", DefaultOutputMqttConnectTcp, "<ip>:<port>")
+	_outputMqttTopic := _flags.String ("output-mqtt-topic", DefaultOutputMqttTopic, "<topic>")
+	_outputMqttClient := _flags.String ("output-mqtt-client", DefaultOutputMqttClient, "<client-id>")
+	_outputMqttUsername := _flags.String ("output-mqtt-username", DefaultOutputMqttUsername, "<username>")
+	_outputMqttPassword := _flags.String ("output-mqtt-password", DefaultOutputMqttPassword, "<password>")
+	_outputMqttKeepAlive := _flags.Uint ("output-mqtt-keep-alive", DefaultOutputMqttKeepAlive, "<seconds>")
+	_outputMqttCleanSession := _flags.Bool ("output-mqtt-clean-session", DefaultOutputMqttCleanSession, "true | false")
+	_outputMqttQueueSize := _flags.Uint ("output-mqtt-queue", DefaultOutputMqttQueueSize, "<size>")
+	_outputMqttDebug := _flags.Bool ("output-mqtt-debug", DefaultOutputMqttDebug, "true | false")
+	
 	_dequeueReportInterval := _flags.Duration ("report-timeout", DefaultDequeueReportInterval, "<duration>")
 	_dequeueReportCounter := _flags.Uint ("report-messages", DefaultDequeueReportCounter, "<count>")
 	
@@ -283,6 +295,27 @@ func configure (_arguments []string) (*Configuration, error) {
 	}
 	
 	
+	var _outputMqttConfiguration *OutputMqttConfiguration = nil
+	if *_outputMqttConnectTcp != "" {
+		*_outputMqttEnabled = true
+	}
+	if *_outputMqttEnabled {
+		_outputMqttConfiguration = & OutputMqttConfiguration {
+				Identifier : *_outputMqttIdentifier,
+				ConnectTcp : *_outputMqttConnectTcp,
+				Topic : *_outputMqttTopic,
+				Client : *_outputMqttClient,
+				Username : *_outputMqttUsername,
+				Password : *_outputMqttPassword,
+				KeepAlive : *_outputMqttKeepAlive,
+				CleanSession : *_outputMqttCleanSession,
+				QueueSize : *_outputMqttQueueSize,
+				Debug : *_outputMqttDebug || *_forcedDebug,
+			}
+		_globalDebug = _globalDebug || _outputMqttConfiguration.Debug
+	}
+	
+	
 	_dequeueConfiguration := & DequeueConfiguration {
 			TickerInterval : DefaultDequeueTickerInterval,
 			ReportInterval : *_dequeueReportInterval,
@@ -324,6 +357,7 @@ func configure (_arguments []string) (*Configuration, error) {
 			InputMqtt : _inputMqttConfiguration,
 			OutputStdout : _outputStdoutConfiguration,
 			OutputFile : _outputFileConfiguration,
+			OutputMqtt : _outputMqttConfiguration,
 			Dequeue : _dequeueConfiguration,
 			Parser : _parserConfiguration,
 			MessagesQueueSize : *_messagesQueueSize,

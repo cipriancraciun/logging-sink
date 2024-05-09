@@ -19,8 +19,11 @@ type Configuration struct {
 	InputSyslog *InputSyslogConfiguration
 	InputHttp *InputHttpConfiguration
 	InputMqtt *InputMqttConfiguration
+	
 	OutputStdout *OutputStdoutConfiguration
 	OutputFile *OutputFileConfiguration
+	OutputMqtt *OutputMqttConfiguration
+	
 	Dequeue *DequeueConfiguration
 	Parser *ParserConfiguration
 	
@@ -145,6 +148,25 @@ func bootstrap () (error) {
 		if _context, _error := outputFileInitialize (_configuration, _outputQueue, _signalsQueue, _exitGroup); _error == nil {
 			_outputFileContext = _context
 			defer outputFileFinalize (_outputFileContext)
+		} else {
+			return _error
+		}
+	}
+	
+	
+	var _outputMqttContext *OutputMqttContext = nil
+	if _configuration.OutputMqtt != nil {
+		if _configuration.Debug {
+			log.Printf ("[ii] [8e41fe87]  initializing output mqtt...\n")
+		}
+		_configuration := _configuration.OutputMqtt
+		_outputQueue := make (chan *Message, _configuration.QueueSize)
+		_outputQueues = append (_outputQueues, _outputQueue)
+		_signalsQueue := make (chan os.Signal, DefaultSignalsQueueSize)
+		_serviceSignalsQueues = append (_serviceSignalsQueues, _signalsQueue)
+		if _context, _error := outputMqttInitialize (_configuration, _outputQueue, _signalsQueue, _exitGroup); _error == nil {
+			_outputMqttContext = _context
+			defer outputMqttFinalize (_outputMqttContext)
 		} else {
 			return _error
 		}
