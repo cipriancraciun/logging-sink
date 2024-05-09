@@ -1,0 +1,229 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.5.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:074337b7-8669-4fd5-8a87-eb16f9834cd6",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2024-05-09T22:16:29+03:00",
+    "tools": [
+      {
+        "vendor": "CycloneDX",
+        "name": "cyclonedx-gomod",
+        "version": "v1.7.0",
+        "hashes": [
+          {
+            "alg": "MD5",
+            "content": "34cca5491937f97be8ca18e3a86378e0"
+          },
+          {
+            "alg": "SHA-1",
+            "content": "95ac131ab30284604ad07e791e821b96cc2a68d0"
+          },
+          {
+            "alg": "SHA-256",
+            "content": "7b631b75e591da8c031ef870016be17f666cbad39dcc1bf57fb174a8249699ce"
+          },
+          {
+            "alg": "SHA-384",
+            "content": "b00ea4f5b25c231a2c2eec519b283b303018dfba5204b90588cefa3b133e5b942ebb5417752c7e288c3c004abc76ac08"
+          },
+          {
+            "alg": "SHA-512",
+            "content": "bd1bba01a1e780bc2b2d2a41f0cab5ed5000a4c95e555e752e73d5e23ecacf967e249f11fb0cfddf55ee331de66531eeece93eadff2f9795cfb6efaba9a6fb65"
+          }
+        ],
+        "externalReferences": [
+          {
+            "url": "https://github.com/CycloneDX/cyclonedx-gomod",
+            "type": "vcs"
+          },
+          {
+            "url": "https://cyclonedx.org",
+            "type": "website"
+          }
+        ]
+      }
+    ],
+    "component": {
+      "bom-ref": "pkg:golang/github.com/volution/logging-sink@v0.0.0-20240509191609-b04383672254?type=module",
+      "type": "application",
+      "name": "github.com/volution/logging-sink",
+      "version": "v0.0.0-20240509191609-b04383672254",
+      "purl": "pkg:golang/github.com/volution/logging-sink@v0.0.0-20240509191609-b04383672254?type=module\u0026goos=linux\u0026goarch=amd64",
+      "externalReferences": [
+        {
+          "url": "https://github.com/volution/logging-sink",
+          "type": "vcs"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "pkg:golang/github.com/basgys/goxml2json@v1.1.1-0.20231018121955-e66ee54ceaad?type=module",
+      "type": "library",
+      "name": "github.com/basgys/goxml2json",
+      "version": "v1.1.1-0.20231018121955-e66ee54ceaad",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "decc00bdbce07da23a9cab830d4ec188a7d945d17e8766702a030777c1dae2df"
+        }
+      ],
+      "purl": "pkg:golang/github.com/basgys/goxml2json@v1.1.1-0.20231018121955-e66ee54ceaad?type=module\u0026goos=linux\u0026goarch=amd64",
+      "externalReferences": [
+        {
+          "url": "https://github.com/basgys/goxml2json",
+          "type": "vcs"
+        }
+      ],
+      "evidence": {
+        "licenses": [
+          {
+            "license": {
+              "id": "MIT"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "bom-ref": "pkg:golang/github.com/pascaldekloe/mqtt@v1.0.2?type=module",
+      "type": "library",
+      "name": "github.com/pascaldekloe/mqtt",
+      "version": "v1.0.2",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "dbfff126c7080d9176275dde7b5d6729082761ba93c5875a3f77df2ca6fdfb4f"
+        }
+      ],
+      "purl": "pkg:golang/github.com/pascaldekloe/mqtt@v1.0.2?type=module\u0026goos=linux\u0026goarch=amd64",
+      "externalReferences": [
+        {
+          "url": "https://github.com/pascaldekloe/mqtt",
+          "type": "vcs"
+        }
+      ],
+      "evidence": {
+        "licenses": [
+          {
+            "license": {
+              "id": "CC0-1.0"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "bom-ref": "pkg:golang/golang.org/x/net@v0.24.0?type=module",
+      "type": "library",
+      "name": "golang.org/x/net",
+      "version": "v0.24.0",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "d4f71ac6417ce7816edfe96f048c794989fdc11941cf37271d94a26851406f4c"
+        }
+      ],
+      "purl": "pkg:golang/golang.org/x/net@v0.24.0?type=module\u0026goos=linux\u0026goarch=amd64",
+      "evidence": {
+        "licenses": [
+          {
+            "license": {
+              "id": "BSD-3-Clause"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "bom-ref": "pkg:golang/golang.org/x/text@v0.14.0?type=module",
+      "type": "library",
+      "name": "golang.org/x/text",
+      "version": "v0.14.0",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "49c5f9c357936b742a4fca22ebece23fb7535754b6f802d4d1b23ed335ca5a24"
+        }
+      ],
+      "purl": "pkg:golang/golang.org/x/text@v0.14.0?type=module\u0026goos=linux\u0026goarch=amd64",
+      "evidence": {
+        "licenses": [
+          {
+            "license": {
+              "id": "BSD-3-Clause"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "bom-ref": "pkg:golang/gopkg.in/mcuadros/go-syslog.v2@v2.3.0?type=module",
+      "type": "library",
+      "name": "gopkg.in/mcuadros/go-syslog.v2",
+      "version": "v2.3.0",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "91cb224be5ac4cac8810f00124126da06d0a90e4bacb3bc9fbf7999610fbf649"
+        }
+      ],
+      "purl": "pkg:golang/gopkg.in/mcuadros/go-syslog.v2@v2.3.0?type=module\u0026goos=linux\u0026goarch=amd64",
+      "externalReferences": [
+        {
+          "url": "https://github.com/mcuadros/go-syslog",
+          "type": "vcs"
+        }
+      ],
+      "evidence": {
+        "licenses": [
+          {
+            "license": {
+              "id": "MIT"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:golang/github.com/volution/logging-sink@v0.0.0-20240509191609-b04383672254?type=module",
+      "dependsOn": [
+        "pkg:golang/github.com/basgys/goxml2json@v1.1.1-0.20231018121955-e66ee54ceaad?type=module",
+        "pkg:golang/github.com/pascaldekloe/mqtt@v1.0.2?type=module",
+        "pkg:golang/gopkg.in/mcuadros/go-syslog.v2@v2.3.0?type=module"
+      ]
+    },
+    {
+      "ref": "pkg:golang/github.com/basgys/goxml2json@v1.1.1-0.20231018121955-e66ee54ceaad?type=module",
+      "dependsOn": [
+        "pkg:golang/golang.org/x/net@v0.24.0?type=module",
+        "pkg:golang/golang.org/x/text@v0.14.0?type=module"
+      ]
+    },
+    {
+      "ref": "pkg:golang/github.com/pascaldekloe/mqtt@v1.0.2?type=module"
+    },
+    {
+      "ref": "pkg:golang/golang.org/x/net@v0.24.0?type=module",
+      "dependsOn": [
+        "pkg:golang/golang.org/x/text@v0.14.0?type=module"
+      ]
+    },
+    {
+      "ref": "pkg:golang/golang.org/x/text@v0.14.0?type=module"
+    },
+    {
+      "ref": "pkg:golang/gopkg.in/mcuadros/go-syslog.v2@v2.3.0?type=module"
+    }
+  ]
+}

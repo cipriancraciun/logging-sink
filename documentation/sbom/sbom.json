@@ -1,0 +1,37 @@
+[
+  {
+    "name": "github.com/basgys/goxml2json",
+    "version": "v1.1.1-0.20231018121955-e66ee54ceaad",
+    "purl": "pkg:golang/github.com/basgys/goxml2json@v1.1.1-0.20231018121955-e66ee54ceaad?type=module&goos=linux&goarch=amd64",
+    "license": "MIT",
+    "vcs": "https://github.com/basgys/goxml2json"
+  },
+  {
+    "name": "github.com/pascaldekloe/mqtt",
+    "version": "v1.0.2",
+    "purl": "pkg:golang/github.com/pascaldekloe/mqtt@v1.0.2?type=module&goos=linux&goarch=amd64",
+    "license": "CC0-1.0",
+    "vcs": "https://github.com/pascaldekloe/mqtt"
+  },
+  {
+    "name": "golang.org/x/net",
+    "version": "v0.24.0",
+    "purl": "pkg:golang/golang.org/x/net@v0.24.0?type=module&goos=linux&goarch=amd64",
+    "license": "BSD-3-Clause",
+    "vcs": "https://github.com/golang/net"
+  },
+  {
+    "name": "golang.org/x/text",
+    "version": "v0.14.0",
+    "purl": "pkg:golang/golang.org/x/text@v0.14.0?type=module&goos=linux&goarch=amd64",
+    "license": "BSD-3-Clause",
+    "vcs": "https://github.com/golang/text"
+  },
+  {
+    "name": "gopkg.in/mcuadros/go-syslog.v2",
+    "version": "v2.3.0",
+    "purl": "pkg:golang/gopkg.in/mcuadros/go-syslog.v2@v2.3.0?type=module&goos=linux&goarch=amd64",
+    "license": "MIT",
+    "vcs": "https://github.com/mcuadros/go-syslog"
+  }
+]
