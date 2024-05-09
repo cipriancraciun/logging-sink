@@ -1,6 +1,6 @@
 
 
-package main
+package lib
 
 
 import "crypto/sha256"

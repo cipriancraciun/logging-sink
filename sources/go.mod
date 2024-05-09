@@ -1,4 +1,4 @@
-module github.com/cipriancraciun/logging-sink
+module github.com/volution/logging-sink
 
 go 1.22
 

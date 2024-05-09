@@ -1,6 +1,6 @@
 
 
-package main
+package lib
 
 
 import "log"
@@ -10,7 +10,7 @@ import "regexp"
 
 
 
-func main () () {
+func Main () () {
 	
 	log.SetFlags (0)
 	
