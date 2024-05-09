@@ -85,28 +85,6 @@
 
 
 
-<< examples / sink / from-syslog + to-file / rfc5424
-	exec -- "${ZRUN}" ':: examples / exec' \
-			--input-syslog-listen-udp "${_SYSLOG_INPUT_IP}:${_SYSLOG_INPUT_PORT}" \
-			--input-syslog-format rfc5424 \
-			--output-file-current-symlink "${_FILE_OUTPUT_LOGS}/tail" \
-			--output-file-current-store "${_FILE_OUTPUT_LOGS}/current" \
-			--output-file-archived-store "${_FILE_OUTPUT_LOGS}/archived" \
-			--output-file-archived-compress "${_FILE_OUTPUT_COMPRESSION}" \
-			--output-file-json-pretty=false \
-			--output-file-messages 6 \
-			--output-file-timeout 6s \
-			"${@}" \
-	#
-!!
-
-
-
-
-
-
-
-
 << examples / sink / from-syslog + to-stdout + jq-replace / rfc5424
 	_jq_script='
 			
@@ -213,6 +191,45 @@
 			--output-mqtt-connect-tcp "${_MQTT_OUTPUT_IP}:${_MQTT_OUTPUT_PORT}" \
 			--output-mqtt-client "${_MQTT_OUTPUT_CLIENT}" \
 			--output-mqtt-topic "${_MQTT_OUTPUT_TOPIC}" \
+			"${@}" \
+	#
+!!
+
+
+
+
+
+
+
+
+<< examples / sink / from-syslog + to-file / rfc5424
+	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-syslog-listen-udp "${_SYSLOG_INPUT_IP}:${_SYSLOG_INPUT_PORT}" \
+			--input-syslog-format rfc5424 \
+			--output-file-current-symlink "${_FILE_OUTPUT_LOGS}/tail" \
+			--output-file-current-store "${_FILE_OUTPUT_LOGS}/current" \
+			--output-file-archived-store "${_FILE_OUTPUT_LOGS}/archived" \
+			--output-file-archived-compress "${_FILE_OUTPUT_COMPRESSION}" \
+			--output-file-json-pretty=false \
+			--output-file-messages 100000 \
+			--output-file-timeout 120s \
+			"${@}" \
+	#
+!!
+
+
+<< examples / sink / from-mqtt + to-file
+	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-mqtt-connect-tcp "${_MQTT_INPUT_IP}:${_MQTT_INPUT_PORT}" \
+			--input-mqtt-client "${_MQTT_INPUT_CLIENT}" \
+			--input-mqtt-topic "${_MQTT_INPUT_TOPIC}" \
+			--output-file-current-symlink "${_FILE_OUTPUT_LOGS}/tail" \
+			--output-file-current-store "${_FILE_OUTPUT_LOGS}/current" \
+			--output-file-archived-store "${_FILE_OUTPUT_LOGS}/archived" \
+			--output-file-archived-compress "${_FILE_OUTPUT_COMPRESSION}" \
+			--output-file-json-pretty=false \
+			--output-file-messages 100000 \
+			--output-file-timeout 3600s \
 			"${@}" \
 	#
 !!
@@ -444,6 +461,8 @@
 	
 	test -d ./.outputs
 	mkdir -- ./.outputs/logs
+	mkdir -- ./.outputs/logs/current
+	mkdir -- ./.outputs/logs/archived
 	
 	ln -s -f -T -- ./.outputs/logs ./.logs
 !!
