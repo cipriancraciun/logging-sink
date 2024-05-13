@@ -12,7 +12,6 @@ import "time"
 type Message struct {
 	
 	Schema string `json:"schema"`
-	SubSchema string `json:"subschema,omitempty"`
 	
 	Sequence uint64 `json:"sequence"`
 	Timestamp time.Time `json:"timestamp"`
@@ -38,6 +37,7 @@ type CollectorMessage struct {
 	
 	CollectorType string
 	CollectorIdentifier string
+	CollectorTimestamp time.Time
 	
 	MessageRaw []byte
 	MessageSha256 string

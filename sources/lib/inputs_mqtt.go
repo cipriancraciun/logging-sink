@@ -267,6 +267,8 @@ func inputMqttProcess (_context *InputMqttContext, _topicRaw []byte, _messageRaw
 	
 	_configuration := _context.configuration
 	
+	_timestamp := time.Now ()
+	
 	var _topic string = ""
 	if utf8.Valid (_topicRaw) {
 		_topic = string (_topicRaw)
@@ -295,6 +297,7 @@ func inputMqttProcess (_context *InputMqttContext, _topicRaw []byte, _messageRaw
 	_collectorMessage := & CollectorMessage {
 			CollectorType : MqttCollectorType,
 			CollectorIdentifier : _configuration.Identifier,
+			CollectorTimestamp : _timestamp,
 			MessageRaw : _messageRaw,
 			MessageSha256 : _messageSha256,
 			MessageText : _messageText,

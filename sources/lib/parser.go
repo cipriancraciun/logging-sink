@@ -95,10 +95,9 @@ func parserProcess (_context *ParserContext, _collectorMessage *CollectorMessage
 	
 	_configuration := _context.configuration
 	
-	_timestamp := time.Now ()
-	
 	_collectorType := _collectorMessage.CollectorType
 	_collectorIdentifier := _collectorMessage.CollectorIdentifier
+	_collectorTimestamp := _collectorMessage.CollectorTimestamp
 	_messageRaw := _collectorMessage.MessageRaw
 	_messageSha256 := _collectorMessage.MessageSha256
 	_messageText := _collectorMessage.MessageText
@@ -107,10 +106,9 @@ func parserProcess (_context *ParserContext, _collectorMessage *CollectorMessage
 	
 	_message := & Message {
 			Schema : MessageSchema,
-			SubSchema : "",
 			Sequence : _sequence,
-			Timestamp : _timestamp,
-			TimestampUnix : uint64 (_timestamp.UnixNano () / 1000000),
+			Timestamp : _collectorTimestamp,
+			TimestampUnix : uint64 (_collectorTimestamp.UnixNano () / 1000000),
 			CollectorType : _collectorType,
 			CollectorIdentifier : _collectorIdentifier,
 			MessageRaw : _messageRaw,

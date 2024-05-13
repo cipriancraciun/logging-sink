@@ -214,6 +214,8 @@ func inputHttpProcess (_context *InputHttpContext, _request *http.Request) (erro
 	
 	_configuration := _context.configuration
 	
+	_timestamp := time.Now ()
+	
 	var _messageRaw []byte
 	if _messageRaw_0, _error := inputHttpRequestExtractData (_context, _request); _error == nil {
 		_messageRaw = _messageRaw_0
@@ -327,6 +329,7 @@ func inputHttpProcess (_context *InputHttpContext, _request *http.Request) (erro
 	_collectorMessage := & CollectorMessage {
 			CollectorType : HttpCollectorType,
 			CollectorIdentifier : _configuration.Identifier,
+			CollectorTimestamp : _timestamp,
 			MessageRaw : _messageRaw,
 			MessageSha256 : _messageSha256,
 			MessageText : _messageText,

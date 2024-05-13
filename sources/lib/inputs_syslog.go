@@ -274,6 +274,8 @@ func inputSyslogProcess (_context *InputSyslogContext, _syslogMessage syslog_for
 	
 	_configuration := _context.configuration
 	
+	_timestampNow := time.Now ()
+	
 	for _key, _value := range _syslogMessage {
 		_shouldDelete := false
 		switch _value {
@@ -388,6 +390,7 @@ func inputSyslogProcess (_context *InputSyslogContext, _syslogMessage syslog_for
 	_collectorMessage := & CollectorMessage {
 			CollectorType : SyslogCollectorType,
 			CollectorIdentifier : _configuration.Identifier,
+			CollectorTimestamp : _timestampNow,
 			MessageRaw : _messageRaw,
 			MessageSha256 : _messageSha256,
 			MessageText : _messageText,
