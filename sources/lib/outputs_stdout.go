@@ -70,6 +70,9 @@ func outputStdoutFinalize (_context *OutputStdoutContext) (error) {
 	
 	var _error error = nil
 	if _context.file != nil {
+		if _context.configuration.Debug {
+			log.Printf ("[ii] [2c3353f6]  output stdout closing...\n")
+		}
 		_error = _context.file.Close ()
 	}
 	

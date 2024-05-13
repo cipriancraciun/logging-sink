@@ -52,16 +52,7 @@ type InputHttpContext struct {
 
 func inputHttpInitialize (_configuration *InputHttpConfiguration, _messagesQueue chan<- *CollectorMessage, _signalsQueue <-chan os.Signal, _exitGroup *sync.WaitGroup) (*InputHttpContext, error) {
 	
-	_server := & http.Server {
-			// ErrorLog : !!!!,
-		}
-	
-	if _configuration.Debug {
-		log.Printf ("[ii] [8e924835]  input http using timeout of `%s`...\n", _configuration.Timeout)
-	}
-	_server.ReadTimeout = _configuration.Timeout
-	_server.WriteTimeout = _configuration.Timeout
-	_server.IdleTimeout = _configuration.Timeout
+	_server := & http.Server {}
 	
 	_listening := false
 	if _configuration.ListenTcp != "" {
@@ -75,6 +66,13 @@ func inputHttpInitialize (_configuration *InputHttpConfiguration, _messagesQueue
 	if !_listening {
 		return nil, fmt.Errorf ("[20732489]  input http has no listeners configured!")
 	}
+	
+	if _configuration.Debug {
+		log.Printf ("[ii] [8e924835]  input http using timeout of `%s`...\n", _configuration.Timeout)
+	}
+	_server.ReadTimeout = _configuration.Timeout
+	_server.WriteTimeout = _configuration.Timeout
+	_server.IdleTimeout = _configuration.Timeout
 	
 	if _configuration.Debug {
 		log.Printf ("[ii] [6ff0ba51]  input http starting...\n")
@@ -91,13 +89,13 @@ func inputHttpInitialize (_configuration *InputHttpConfiguration, _messagesQueue
 	
 	_server.Handler = (*InputHttpHandler) (_context)
 	
-	_bootError := make (chan error)
+	_listenError := make (chan error)
 	go func () () {
-		_bootError <- _server.ListenAndServe ()
+		_listenError <- _server.ListenAndServe ()
 	} ()
 	time.Sleep (100 * time.Millisecond)
 	select {
-		case _error := <- _bootError :
+		case _error := <- _listenError :
 			return nil, _error
 		default :
 	}
@@ -120,6 +118,9 @@ func inputHttpFinalize (_context *InputHttpContext) (error) {
 	
 	var _error error = nil
 	if _context.server != nil {
+		if _context.configuration.Debug {
+			log.Printf ("[ii] [1fecdb14]  input http closing...\n")
+		}
 		_error = _context.server.Close ()
 	}
 	

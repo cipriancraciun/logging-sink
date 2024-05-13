@@ -49,11 +49,7 @@ type OutputMqttContext struct {
 
 func outputMqttInitialize (_configuration *OutputMqttConfiguration, _messagesQueue <-chan *Message, _signalsQueue <-chan os.Signal, _exitGroup *sync.WaitGroup) (*OutputMqttContext, error) {
 	
-	_clientConfig := & mqtt.Config {
-			AtLeastOnceMax : 16384,
-			ExactlyOnceMax : 16384,
-			PauseTimeout : 6 * time.Second,
-		}
+	_clientConfig := & mqtt.Config {}
 	
 	_connecting := false
 	if _configuration.ConnectTcp != "" {
@@ -73,6 +69,9 @@ func outputMqttInitialize (_configuration *OutputMqttConfiguration, _messagesQue
 	_clientConfig.Password = []byte (_configuration.Password)
 	_clientConfig.KeepAlive = uint16 (_configuration.KeepAlive)
 	_clientConfig.CleanSession = _configuration.CleanSession
+	_clientConfig.AtLeastOnceMax = 16384
+	_clientConfig.ExactlyOnceMax = 16384
+	_clientConfig.PauseTimeout = 6 * time.Second
 	
 	if _configuration.Debug {
 		log.Printf ("[ii] [3f68a560]  output mqtt starting...\n")
@@ -113,6 +112,9 @@ func outputMqttFinalize (_context *OutputMqttContext) (error) {
 	
 	var _error error = nil
 	if _context.client != nil {
+		if _context.configuration.Debug {
+			log.Printf ("[ii] [61800990]  output mqtt disconnecting...\n")
+		}
 		_cancelation := context.Background ()
 		_error = _context.client.Disconnect (_cancelation.Done ())
 	}
@@ -153,7 +155,7 @@ func outputMqttLooper (_context *OutputMqttContext) (error) {
 			}
 			_, _, _error := _client.ReadSlices ()
 			if _error == nil {
-				log.Printf ("[ww] [9db18266]  output mqtt received message;  ignoring!\n")
+				log.Printf ("[ww] [c4b2bebd]  output mqtt received message;  ignoring!\n")
 			} else if _error == mqtt.ErrClosed {
 				return
 			} else {

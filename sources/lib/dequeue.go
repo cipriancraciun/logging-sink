@@ -80,8 +80,6 @@ func dequeueFinalize (_context *DequeueContext) (error) {
 	_context.signalsQueue = nil
 	_context.exitGroup = nil
 	
-	parserFinalize (_context.parser)
-	
 	_exitGroup.Done ()
 	
 	return nil

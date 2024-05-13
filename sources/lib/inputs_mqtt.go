@@ -54,11 +54,7 @@ type InputMqttContext struct {
 
 func inputMqttInitialize (_configuration *InputMqttConfiguration, _messagesQueue chan<- *CollectorMessage, _signalsQueue <-chan os.Signal, _exitGroup *sync.WaitGroup) (*InputMqttContext, error) {
 	
-	_clientConfig := & mqtt.Config {
-			AtLeastOnceMax : 16384,
-			ExactlyOnceMax : 16384,
-			PauseTimeout : 6 * time.Second,
-		}
+	_clientConfig := & mqtt.Config {}
 	
 	_connecting := false
 	if _configuration.ConnectTcp != "" {
@@ -74,6 +70,9 @@ func inputMqttInitialize (_configuration *InputMqttConfiguration, _messagesQueue
 	}
 	
 	_clientId := _configuration.Client
+	_clientConfig.AtLeastOnceMax = 16384
+	_clientConfig.ExactlyOnceMax = 16384
+	_clientConfig.PauseTimeout = 6 * time.Second
 	_clientConfig.UserName = _configuration.Username
 	_clientConfig.Password = []byte (_configuration.Password)
 	_clientConfig.KeepAlive = uint16 (_configuration.KeepAlive)
@@ -118,6 +117,9 @@ func inputMqttFinalize (_context *InputMqttContext) (error) {
 	
 	var _error error = nil
 	if _context.client != nil {
+		if _context.configuration.Debug {
+			log.Printf ("[ii] [868d3bda]  input mqtt disconnecting...\n")
+		}
 		_cancelation := context.Background ()
 		_error = _context.client.Disconnect (_cancelation.Done ())
 	}

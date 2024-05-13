@@ -97,6 +97,9 @@ func outputFileFinalize (_context *OutputFileContext) (error) {
 		return nil
 	}
 	
+	if _context.configuration.Debug {
+		log.Printf ("[ii] [d3683c00]  output file closing...\n")
+	}
 	_error := outputFileClose (_context, true)
 	
 	_exitGroup := _context.exitGroup

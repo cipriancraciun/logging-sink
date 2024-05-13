@@ -141,6 +141,9 @@ func inputSyslogFinalize (_context *InputSyslogContext) (error) {
 	
 	var _error error = nil
 	if _context.server != nil {
+		if _context.configuration.Debug {
+			log.Printf ("[ii] [40355d0a]  input syslog closing...\n")
+		}
 		_error = _context.server.Kill ()
 	}
 	
