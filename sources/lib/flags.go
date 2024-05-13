@@ -25,6 +25,7 @@ func configure (_arguments []string) (*Configuration, error) {
 	_inputSyslogListenUnix := _flags.String ("input-syslog-listen-unix", DefaultInputSyslogListenUnix, "<path>")
 	_inputSyslogFormatName := _flags.String ("input-syslog-format", DefaultInputSyslogFormat, "rfc3164 | rfc5424")
 	_inputSyslogParseJson := _flags.Bool ("input-syslog-json", DefaultInputSyslogParseJson, "true | false")
+	_inputSyslogParseXml := _flags.Bool ("input-syslog-xml", DefaultInputSyslogParseXml, "true | false")
 	_inputSyslogDebug := _flags.Bool ("input-syslog-debug", DefaultInputSyslogDebug, "true | false")
 	
 	_inputHttpEnabled := _flags.Bool ("input-http", DefaultInputHttpEnabled, "true | false")
@@ -45,6 +46,7 @@ func configure (_arguments []string) (*Configuration, error) {
 	_inputMqttKeepAlive := _flags.Uint ("input-mqtt-keep-alive", DefaultInputMqttKeepAlive, "<seconds>")
 	_inputMqttCleanSession := _flags.Bool ("input-mqtt-clean-session", DefaultInputMqttCleanSession, "true | false")
 	_inputMqttParseJson := _flags.Bool ("input-mqtt-json", DefaultInputMqttParseJson, "true | false")
+	_inputMqttParseXml := _flags.Bool ("input-mqtt-xml", DefaultInputMqttParseXml, "true | false")
 	_inputMqttDebug := _flags.Bool ("input-mqtt-debug", DefaultInputMqttDebug, "true | false")
 	
 	_outputStdoutEnabled := _flags.Bool ("output-stdout", DefaultOutputStdoutEnabled, "true | false")
@@ -135,6 +137,7 @@ func configure (_arguments []string) (*Configuration, error) {
 				FormatName : *_inputSyslogFormatName,
 				FormatParser : _inputSyslogFormatParser,
 				ParseJson : *_inputSyslogParseJson,
+				ParseXml : *_inputSyslogParseXml,
 				Debug : *_inputSyslogDebug || *_forcedDebug,
 			}
 		_globalDebug = _globalDebug || _inputSyslogConfiguration.Debug
@@ -174,6 +177,7 @@ func configure (_arguments []string) (*Configuration, error) {
 				KeepAlive : *_inputMqttKeepAlive,
 				CleanSession : *_inputMqttCleanSession,
 				ParseJson : *_inputMqttParseJson,
+				ParseXml : *_inputMqttParseXml,
 				Debug : *_inputMqttDebug || *_forcedDebug,
 			}
 		_globalDebug = _globalDebug || _inputMqttConfiguration.Debug

@@ -28,6 +28,7 @@ type InputSyslogConfiguration struct {
 	FormatName string
 	FormatParser syslog_format.Format
 	ParseJson bool
+	ParseXml bool
 	Debug bool
 }
 
@@ -294,8 +295,13 @@ func inputSyslogProcess (_context *InputSyslogContext, _syslogMessage syslog_for
 	}
 	
 	var _messageJson json.RawMessage = nil
-	if _configuration.ParseJson {
+	if _configuration.ParseJson && (_messageJson == nil) {
 		if _json, _error := parseMessageJson (_messageText); _error == nil {
+			_messageJson = _json
+		}
+	}
+	if _configuration.ParseXml && (_messageJson == nil) {
+		if _json, _error := parseMessageXml (_messageText); _error == nil {
 			_messageJson = _json
 		}
 	}

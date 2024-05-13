@@ -16,6 +16,7 @@ const DefaultInputSyslogListenUnix = ""
 const DefaultInputSyslogTimeout = 6 * time.Second // TODO
 const DefaultInputSyslogFormat = "rfc3164"
 const DefaultInputSyslogParseJson = false
+const DefaultInputSyslogParseXml = false
 const DefaultInputSyslogDebug = false
 
 const DefaultInputHttpEnabled = false
@@ -39,6 +40,7 @@ const DefaultInputMqttPassword = ""
 const DefaultInputMqttKeepAlive = 30
 const DefaultInputMqttCleanSession = false
 const DefaultInputMqttParseJson = false
+const DefaultInputMqttParseXml = false
 const DefaultInputMqttDebug = false
 
 const DefaultOutputStdoutEnabled = true

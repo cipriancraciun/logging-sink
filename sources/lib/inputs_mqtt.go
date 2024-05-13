@@ -30,6 +30,7 @@ type InputMqttConfiguration struct {
 	KeepAlive uint
 	CleanSession bool
 	ParseJson bool
+	ParseXml bool
 	Debug bool
 }
 
@@ -280,8 +281,13 @@ func inputMqttProcess (_context *InputMqttContext, _topicRaw []byte, _messageRaw
 	}
 	
 	var _messageJson json.RawMessage = nil
-	if _configuration.ParseJson {
+	if _configuration.ParseJson && (_messageJson == nil) {
 		if _json, _error := parseMessageJson (_messageText); _error == nil {
+			_messageJson = _json
+		}
+	}
+	if _configuration.ParseXml && (_messageJson == nil) {
+		if _json, _error := parseMessageXml (_messageText); _error == nil {
 			_messageJson = _json
 		}
 	}
