@@ -3,8 +3,6 @@
 package lib
 
 
-import "crypto/sha256"
-import "encoding/hex"
 import "encoding/json"
 import "fmt"
 import "io/ioutil"
@@ -16,9 +14,6 @@ import "strings"
 import "sync"
 import "syscall"
 import "time"
-import "unicode/utf8"
-
-import x2j "github.com/basgys/goxml2json"
 
 
 
@@ -227,8 +222,7 @@ func inputHttpProcess (_context *InputHttpContext, _request *http.Request) (erro
 		return nil
 	}
 	
-	_messageSha256Raw := sha256.Sum256 (_messageRaw)
-	_messageSha256 := hex.EncodeToString (_messageSha256Raw[:])
+	_messageSha256 := generateMessageSha256 (_messageRaw)
 	
 	_messageParseable := true
 	
@@ -276,8 +270,8 @@ func inputHttpProcess (_context *InputHttpContext, _request *http.Request) (erro
 	if _messageParseable {
 		switch _messageContentType {
 			case "text/plain", "application/json", "application/xml" :
-				if utf8.Valid (_messageRaw) {
-					_messageText = string (_messageRaw)
+				if _text, _valid := parseMessageText (_messageRaw); _valid {
+					_messageText = _text
 				} else {
 					log.Printf ("[ww] [9d938d82]  input http failed accepting body:  invalid UTF-8;  ignoring and aborting parsing!\n")
 					_messageParseable = false
@@ -306,8 +300,8 @@ func inputHttpProcess (_context *InputHttpContext, _request *http.Request) (erro
 			
 			case "application/json" :
 				if _configuration.ParseJson {
-					if _error := json.Unmarshal ([]byte (_messageText), &_messageJson); _error == nil {
-						// NOP
+					if _json, _error := parseMessageJson (_messageText); _error == nil {
+						_messageJson = _json
 					} else {
 						logError (_error, "[fb140c77]  input http failed accepting body:  invalid JSON format;  ignoring and aborting parsing!")
 						_messageParseable = false
@@ -316,14 +310,8 @@ func inputHttpProcess (_context *InputHttpContext, _request *http.Request) (erro
 			
 			case "application/xml" :
 				if _configuration.ParseXml {
-					_messageReader := strings.NewReader (_messageText)
-					if _buffer, _error := x2j.Convert (_messageReader, x2j.WithTypeConverter (x2j.Null, x2j.Bool, x2j.Int, x2j.Float, x2j.String)); _error == nil {
-						if (_buffer.Len () != 0) && (_buffer.String () != "\"\"\n") {
-							_messageJson = _buffer.Bytes ()
-						} else {
-							log.Printf ("[ee] [01c85ada]  input http failed accepting body:  invalid XML format;  ignoring and aborting parsing!")
-							_messageParseable = false
-						}
+					if _json, _error := parseMessageXml (_messageText); _error == nil {
+						_messageJson = _json
 					} else {
 						logError (_error, "[ffb58358]  input http failed accepting body:  invalid XML format;  ignoring and aborting parsing!")
 						_messageParseable = false

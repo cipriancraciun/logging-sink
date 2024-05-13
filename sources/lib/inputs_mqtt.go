@@ -4,13 +4,10 @@ package lib
 
 
 import "context"
-import "crypto/sha256"
 import "encoding/json"
-import "encoding/hex"
 import "fmt"
 import "log"
 import "os"
-import "strings"
 import "sync"
 import "sync/atomic"
 import "syscall"
@@ -275,21 +272,17 @@ func inputMqttProcess (_context *InputMqttContext, _topicRaw []byte, _messageRaw
 		_topicRaw = nil
 	}
 	
-	_messageSha256Raw := sha256.Sum256 (_messageRaw)
-	_messageSha256 := hex.EncodeToString (_messageSha256Raw[:])
+	_messageSha256 := generateMessageSha256 (_messageRaw)
 	
 	var _messageText string
-	if utf8.Valid (_messageRaw) {
-		_messageText = string (_messageRaw)
+	if _text, _valid := parseMessageText (_messageRaw); _valid {
+		_messageText = _text
 	}
 	
 	var _messageJson json.RawMessage = nil
-	if _configuration.ParseJson && (_messageText != "") {
-		_messageText_0 := strings.TrimSpace (_messageText)
-		if strings.HasPrefix (_messageText_0, "{") && strings.HasSuffix (_messageText_0, "}") {
-			if _error := json.Unmarshal ([]byte (_messageText_0), &_messageJson); _error == nil {
-				// NOP
-			}
+	if _configuration.ParseJson {
+		if _json, _error := parseMessageJson (_messageText); _error == nil {
+			_messageJson = _json
 		}
 	}
 	

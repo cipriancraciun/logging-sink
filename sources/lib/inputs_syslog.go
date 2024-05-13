@@ -4,13 +4,10 @@ package lib
 
 
 import "bufio"
-import "crypto/sha256"
 import "encoding/json"
-import "encoding/hex"
 import "fmt"
 import "log"
 import "os"
-import "strings"
 import "sync"
 import "syscall"
 import "time"
@@ -214,13 +211,12 @@ type InputSyslogFormat struct {
 	delegate syslog_format.Format
 }
 
-func (format *InputSyslogFormat) GetParser (_message []byte) (syslog_format.LogParser) {
-	_sha256Raw := sha256.Sum256 (_message)
-	_sha256Hex := hex.EncodeToString (_sha256Raw[:])
+func (format *InputSyslogFormat) GetParser (_messageRaw []byte) (syslog_format.LogParser) {
+	_messageSha256 := generateMessageSha256 (_messageRaw)
 	return & InputSyslogParser {
-			delegate : format.delegate.GetParser (_message),
-			messageRaw : _message,
-			messageSha256 : _sha256Hex,
+			delegate : format.delegate.GetParser (_messageRaw),
+			messageRaw : _messageRaw,
+			messageSha256 : _messageSha256,
 		}
 }
 
@@ -299,11 +295,8 @@ func inputSyslogProcess (_context *InputSyslogContext, _syslogMessage syslog_for
 	
 	var _messageJson json.RawMessage = nil
 	if _configuration.ParseJson {
-		_messageText_0 := strings.TrimSpace (_messageText)
-		if strings.HasPrefix (_messageText_0, "{") && strings.HasSuffix (_messageText_0, "}") {
-			if _error := json.Unmarshal ([]byte (_messageText_0), &_messageJson); _error == nil {
-				// NOP
-			}
+		if _json, _error := parseMessageJson (_messageText); _error == nil {
+			_messageJson = _json
 		}
 	}
 	

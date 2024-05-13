@@ -3,13 +3,19 @@
 package lib
 
 
+import "crypto/sha256"
 import "encoding/json"
+import "encoding/hex"
 import "fmt"
 import "io"
 import "log"
 import "os"
 import "os/exec"
+import "strings"
 import "time"
+import "unicode/utf8"
+
+import x2j "github.com/basgys/goxml2json"
 
 
 
@@ -308,4 +314,60 @@ func parserExternalCommandProcess (_context *ParserContext, _message *Message) (
 	}
 }
 
+
+
+
+func generateMessageSha256 (_messageRaw []byte) (string) {
+	_messageSha256Raw := sha256.Sum256 (_messageRaw)
+	_messageSha256 := hex.EncodeToString (_messageSha256Raw[:])
+	return _messageSha256
+}
+
+
+func parseMessageText (_messageRaw []byte) (string, bool) {
+	if utf8.Valid (_messageRaw) {
+		return string (_messageRaw), true
+	} else {
+		return "", false
+	}
+}
+
+
+func parseMessageJson (_messageText string) (json.RawMessage, error) {
+	_messageText = strings.TrimSpace (_messageText)
+	if _messageText == "" {
+		return nil, fmt.Errorf ("[809f5cee]  empty JSON payload")
+	} else if strings.HasPrefix (_messageText, "{") && strings.HasSuffix (_messageText, "}") {
+		var _messageJson json.RawMessage = nil
+		if _error := json.Unmarshal ([]byte (_messageText), &_messageJson); _error == nil {
+			return _messageJson, nil
+		} else {
+			return nil, _error
+		}
+	} else {
+		return nil, fmt.Errorf ("[65daef9f]  unsupported JSON payload pattern")
+	}
+}
+
+
+func parseMessageXml (_messageText string) (json.RawMessage, error) {
+	_messageText = strings.TrimSpace (_messageText)
+	if _messageText == "" {
+		return nil, fmt.Errorf ("[2ff799e3]  empty XML payload")
+	} else if strings.HasPrefix (_messageText, "<") && strings.HasSuffix (_messageText, ">") {
+		_messageReader := strings.NewReader (_messageText)
+		if _buffer, _error := x2j.Convert (_messageReader, x2j.WithTypeConverter (x2j.Null, x2j.Bool, x2j.Int, x2j.Float, x2j.String)); _error == nil {
+			if (_buffer.Len () != 0) && (_buffer.String () != "\"\"\n") {
+				var _messageJson json.RawMessage = _buffer.Bytes ()
+				return _messageJson, nil
+			} else {
+				return nil, fmt.Errorf ("[3fff4092]  empty XML payload")
+			}
+		} else {
+			return nil, _error
+		}
+	} else {
+		return nil, fmt.Errorf ("[c0aa304b]  unsupported XML payload pattern")
+	}
+}
 
