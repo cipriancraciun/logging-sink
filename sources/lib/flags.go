@@ -6,6 +6,7 @@ package lib
 import "encoding/json"
 import "fmt"
 import "os"
+import "regexp"
 import "strings"
 import "time"
 
@@ -98,10 +99,20 @@ func configure (_arguments []string) (*Configuration, error) {
 	
 	var _inputMqttConfiguration *InputMqttConfiguration = nil
 	if (_flags.InputMqtt != nil) && flagBoolOrDefault (_flags.InputMqtt.Enabled, DefaultInputMqttEnabled) {
+		_inputMqttTopicIgnore_0 := flagStringOrDefault (_flags.InputMqtt.TopicIgnore, DefaultInputMqttTopicIgnore)
+		var _inputMqttTopicIgnore *regexp.Regexp = nil
+		if _inputMqttTopicIgnore_0 != "" {
+			if _regexp, _error := regexp.Compile (_inputMqttTopicIgnore_0); _error == nil {
+				_inputMqttTopicIgnore = _regexp
+			} else {
+				return nil, fmt.Errorf ("[65696d6c]  invalid `input-mqtt-topic-ignore` syntax:  `%s` //  %s!", _inputMqttTopicIgnore_0, _error)
+			}
+		}
 		_inputMqttConfiguration = & InputMqttConfiguration {
 				Identifier : flagStringOrDefault (_flags.InputMqtt.Identifier, DefaultInputMqttIdentifier),
 				ConnectTcp : flagStringOrDefault (_flags.InputMqtt.ConnectTcp, DefaultInputMqttConnectTcp),
 				Topic : flagStringOrDefault (_flags.InputMqtt.Topic, DefaultInputMqttTopic),
+				TopicIgnore : _inputMqttTopicIgnore,
 				Client : flagStringOrDefault (_flags.InputMqtt.Client, DefaultInputMqttClient),
 				Username : flagStringOrDefault (_flags.InputMqtt.Username, DefaultInputMqttUsername),
 				Password : flagStringOrDefault (_flags.InputMqtt.Password, DefaultInputMqttPassword),
@@ -256,6 +267,7 @@ func configure (_arguments []string) (*Configuration, error) {
 			}
 		_globalDebug = _globalDebug || _outputMqttConfiguration.Debug
 	}
+	
 	
 	var _dequeueConfiguration *DequeueConfiguration = nil
 	if _flags.Dequeue == nil {

@@ -32,6 +32,7 @@ const DefaultInputMqttEnabled = false
 const DefaultInputMqttIdentifier = ""
 const DefaultInputMqttConnectTcp = ""
 const DefaultInputMqttTopic = ""
+const DefaultInputMqttTopicIgnore = ""
 const DefaultInputMqttClient = ""
 const DefaultInputMqttUsername = ""
 const DefaultInputMqttPassword = ""

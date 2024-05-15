@@ -8,6 +8,7 @@ import "encoding/json"
 import "fmt"
 import "log"
 import "os"
+import "regexp"
 import "sync"
 import "sync/atomic"
 import "syscall"
@@ -25,6 +26,7 @@ type InputMqttFlags struct {
 	Identifier *string `long:"input-mqtt-identifier" value-name:"{identifier}"`
 	ConnectTcp *string `long:"input-mqtt-connect-tcp" value-name:"{ip}:{port}"`
 	Topic *string `long:"input-mqtt-topic" value-name:"{topic}"`
+	TopicIgnore *string `long:"input-mqtt-topic-ignore" value-name:"{regex} (see <https://pkg.go.dev/regexp/syntax>)"`
 	Client *string `long:"input-mqtt-client" value-name:"{identifier}"`
 	Username *string `long:"input-mqtt-username" value-name:"..." default-mask:"..."`
 	Password *string `long:"input-mqtt-password" value-name:"..." default-mask:"..."`
@@ -43,6 +45,7 @@ type InputMqttConfiguration struct {
 	Identifier string
 	ConnectTcp string
 	Topic string
+	TopicIgnore *regexp.Regexp
 	Client string
 	Username string
 	Password string
@@ -294,6 +297,19 @@ func inputMqttProcess (_context *InputMqttContext, _topicRaw []byte, _messageRaw
 	if utf8.Valid (_topicRaw) {
 		_topic = string (_topicRaw)
 		_topicRaw = nil
+	}
+	
+	if _configuration.TopicIgnore != nil {
+		if _configuration.TopicIgnore.MatchString (_topic) {
+			if _configuration.Debug {
+				log.Printf ("[dd] [97840e0b]  input mqtt ignoring received message on topic `%s`!\n", _topic)
+			}
+			return nil
+		}
+	}
+	
+	if _configuration.Debug {
+		log.Printf ("[dd] [8e59abda]  input mqtt processing received message on topic `%s` (%d bytes)...\n", _topic, len (_messageRaw))
 	}
 	
 	_messageSha256 := generateMessageSha256 (_messageRaw)
