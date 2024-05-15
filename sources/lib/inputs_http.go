@@ -8,6 +8,7 @@ import "fmt"
 import "io/ioutil"
 import "log"
 import "mime"
+import "net"
 import "net/http"
 import "os"
 import "strings"
@@ -339,6 +340,28 @@ func inputHttpProcess (_context *InputHttpContext, _request *http.Request) (erro
 		}
 	}
 	
+	_remoteAddr, _ := net.ResolveTCPAddr ("tcp", _request.RemoteAddr)
+	//  FIXME:  Configure trusting `X-Forwarded-For` headers!
+	//  FIXME:  Implement acording to <https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-For>
+	if _forwardedFor_0 := _request.Header.Get ("X-Forwarded-For"); _forwardedFor_0 != "" {
+		_forwardedFor_1 := strings.Split (_forwardedFor_0, ",")
+		for len (_forwardedFor_1) > 0 {
+			_forwardedFor_2 := _forwardedFor_1[len (_forwardedFor_1) - 1]
+			_forwardedFor_2 = strings.TrimSpace (_forwardedFor_2)
+			if _forwardedFor_2 != "" {
+				_forwardedFor_3 := net.ParseIP (_forwardedFor_2)
+				if _forwardedFor_3 != nil {
+					_remoteAddr = & net.TCPAddr {
+							IP : _forwardedFor_3,
+							Port : 0,
+						}
+					break
+				}
+			}
+			_forwardedFor_1 = _forwardedFor_1[0 : len (_forwardedFor_1) - 1]
+		}
+	}
+	
 	_collectorMessage := & CollectorMessage {
 			CollectorType : HttpCollectorType,
 			CollectorIdentifier : _configuration.Identifier,
@@ -359,7 +382,8 @@ func inputHttpProcess (_context *InputHttpContext, _request *http.Request) (erro
 					QueryRaw : _request.URL.RawQuery,
 					Headers : inputHttpRequestExtractHeaders (_context, _request.Header),
 					Trailers : inputHttpRequestExtractHeaders (_context, _request.Trailer),
-					Remote : _request.RemoteAddr,
+					RemoteIp : _remoteAddr.IP.String (),
+					RemotePort : uint16 (_remoteAddr.Port),
 					ContentType : _messageContentType,
 					ContentTypeParameters : _messageContentTypeParameters,
 					ContentEncoding : _messageContentEncoding,

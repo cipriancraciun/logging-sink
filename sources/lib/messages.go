@@ -87,7 +87,8 @@ type HttpMessageMetaData struct {
 	QueryRaw string `json:"query_raw,omitempty"`
 	Headers HttpMessageHeaders `json:"headers,omitempty"`
 	Trailers HttpMessageHeaders `json:"trailers,omitempty"`
-	Remote string `json:"remote,omitempty"`
+	RemoteIp string `json:"remote_ip,omitempty"`
+	RemotePort uint16 `json:"remote_port,omitempty"`
 	
 	ContentType string `json:"content_type,omitempty"`
 	ContentTypeParameters map[string]string `json:"content_type_parameters,omitempty"`
