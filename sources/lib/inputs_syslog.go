@@ -18,6 +18,21 @@ import syslog_format "gopkg.in/mcuadros/go-syslog.v2/format"
 
 
 
+type InputSyslogFlags struct {
+	
+	Enabled *FlagsBool `long:"input-syslog-enabled" value-name:"{bool}"`
+	Identifier *string `long:"input-syslog-identifier" value-name:"{identifier}"`
+	ListenTcp *string `long:"input-syslog-listen-tcp" value-name:"{ip}:{port}"`
+	ListenUdp *string `long:"input-syslog-listen-udp" value-name:"{ip}:{port}"`
+	ListenUnix *string `long:"input-syslog-listen-unix" value-name:"{path}"`
+	Timeout *time.Duration `long:"input-syslog-timeout" value-name:"{duration}"`
+	Protocol *string `long:"input-syslog-protocol" choice:"rfc3164" choice:"rfc5424"`
+	ParseJson *FlagsBool `long:"input-syslog-parse-json" value-name:"{bool}"`
+	ParseXml *FlagsBool `long:"input-syslog-parse-xml" value-name:"{bool}"`
+	Debug *FlagsBool `long:"input-syslog-debug" value-name:"{bool}"`
+}
+
+
 type InputSyslogConfiguration struct {
 	
 	Identifier string
@@ -25,8 +40,8 @@ type InputSyslogConfiguration struct {
 	ListenUdp string
 	ListenUnix string
 	Timeout time.Duration
-	FormatName string
-	FormatParser syslog_format.Format
+	Protocol string
+	Parser syslog_format.Format
 	ParseJson bool
 	ParseXml bool
 	Debug bool
@@ -53,10 +68,10 @@ func inputSyslogInitialize (_configuration *InputSyslogConfiguration, _messagesQ
 	_server := syslog.NewServer ()
 	
 	if _configuration.Debug {
-		log.Printf ("[ii] [fe61c4fc]  input syslog using protocol `%s`;\n", _configuration.FormatName)
+		log.Printf ("[ii] [fe61c4fc]  input syslog using protocol `%s`;\n", _configuration.Protocol)
 	}
 	_serverFormat := & InputSyslogFormat {
-			delegate : _configuration.FormatParser,
+			delegate : _configuration.Parser,
 		}
 	_server.SetFormat (_serverFormat)
 	
@@ -397,7 +412,7 @@ func inputSyslogProcess (_context *InputSyslogContext, _syslogMessage syslog_for
 			MessageJson : _messageJson,
 			MessageMetaData : & SyslogMessageMetaData {
 					Schema : SyslogMessageMetaDataSchema,
-					Protocol : _configuration.FormatName,
+					Protocol : _configuration.Protocol,
 					Timestamp : _timestamp,
 					TimestampUnix : uint64 (_timestamp.UnixNano () / 1000000),
 					Node : _node,

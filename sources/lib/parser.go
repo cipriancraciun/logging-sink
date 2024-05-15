@@ -20,9 +20,20 @@ import x2j "github.com/basgys/goxml2json"
 
 
 
+type ParserFlags struct {
+	
+	MessageRaw *FlagsBool `long:"parser-message-raw" value-name:"{bool}"`
+	MessageSha256 *FlagsBool `long:"parser-message-sha256" value-name:"{bool}"`
+	Debug *FlagsBool `long:"parser-debug" value-name:"{bool}"`
+	
+	ExternalCommand *string `long:"parser-external-command" value-name:"{command} {argument} ..."`
+	ExternalScript *string `long:"parser-external-script" value-name:"{script}"`
+	ExternalReplace *FlagsBool `long:"parser-external-replace" value-name:"{bool}"`
+}
+
+
 type ParserConfiguration struct {
 	
-	MessageJson bool
 	MessageRaw bool
 	MessageSha256 bool
 	Debug bool

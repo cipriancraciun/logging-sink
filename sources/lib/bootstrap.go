@@ -13,6 +13,38 @@ import "time"
 
 
 
+type Flags struct {
+	
+	InputSyslog *InputSyslogFlags `group:"Input Syslog options"`
+	InputHttp *InputHttpFlags `group:"Input HTTP options"`
+	
+	OutputStdout *OutputStdoutFlags `group:"Output STDOUT options"`
+	OutputFile *OutputFileFlags `group:"Output file options"`
+	
+	InputMqtt *InputMqttFlags `group:"Input MQTT options"`
+	OutputMqtt *OutputMqttFlags `group:"Output MQTT options"`
+	
+	Dequeue *DequeueFlags `group:"Queue options"`
+	Parser *ParserFlags `group:"Parser options"`
+	Global *GlobalFlags `group:"Global options"`
+}
+
+
+type GlobalFlags struct {
+	
+	Debug *FlagsBool `long:"debug" value-name:"{bool}"`
+}
+
+
+type MetaFlags struct {
+	
+	Help bool `short:"h" long:"help" no-ini:"-"`
+	DumpFlags bool `long:"dump-flags" no-ini:"-"`
+	DumpConfiguration bool `long:"dump-configuration" no-ini:"-"`
+}
+
+
+
 
 type Configuration struct {
 	

@@ -19,6 +19,25 @@ import mqtt "github.com/pascaldekloe/mqtt"
 
 
 
+type InputMqttFlags struct {
+	
+	Enabled *FlagsBool `long:"input-mqtt-enabled" value-name:"{bool}"`
+	Identifier *string `long:"input-mqtt-identifier" value-name:"{identifier}"`
+	ConnectTcp *string `long:"input-mqtt-connect-tcp" value-name:"{ip}:{port}"`
+	Topic *string `long:"input-mqtt-topic" value-name:"{topic}"`
+	Client *string `long:"input-mqtt-client" value-name:"{identifier}"`
+	Username *string `long:"input-mqtt-username" value-name:"..." default-mask:"..."`
+	Password *string `long:"input-mqtt-password" value-name:"..." default-mask:"..."`
+	CleanSession *FlagsBool `long:"input-mqtt-clean-session" value-name:"{bool}"`
+	KeepAlive *time.Duration `long:"input-mqtt-keep-alive" value-name:"{duration}"`
+	Ping *time.Duration `long:"input-mqtt-ping" value-name:"{duration}"`
+	Retry *time.Duration `long:"input-mqtt-retry" value-name:"{duration}"`
+	ParseJson *FlagsBool `long:"input-mqtt-parse-json" value-name:"{bool}"`
+	ParseXml *FlagsBool `long:"input-mqtt-parse-xml" value-name:"{bool}"`
+	Debug *FlagsBool `long:"input-mqtt-debug" value-name:"{bool}"`
+}
+
+
 type InputMqttConfiguration struct {
 	
 	Identifier string
@@ -27,8 +46,10 @@ type InputMqttConfiguration struct {
 	Client string
 	Username string
 	Password string
-	KeepAlive uint
 	CleanSession bool
+	KeepAlive time.Duration
+	Ping time.Duration
+	Retry time.Duration
 	ParseJson bool
 	ParseXml bool
 	Debug bool
@@ -73,7 +94,7 @@ func inputMqttInitialize (_configuration *InputMqttConfiguration, _messagesQueue
 	_clientConfig.PauseTimeout = 6 * time.Second
 	_clientConfig.UserName = _configuration.Username
 	_clientConfig.Password = []byte (_configuration.Password)
-	_clientConfig.KeepAlive = uint16 (_configuration.KeepAlive)
+	_clientConfig.KeepAlive = uint16 (_configuration.KeepAlive.Round (time.Second) .Seconds ())
 	_clientConfig.CleanSession = _configuration.CleanSession
 	
 	if _configuration.Debug {
@@ -171,7 +192,7 @@ func inputMqttLooper (_context *InputMqttContext) (error) {
 			} else {
 				logError (_error, "[63f050f6]  input mqtt failed to receive message;  retrying!")
 				_subscribed.Store (false)
-				time.Sleep (DefaultInputMqttRetry)
+				time.Sleep (_configuration.Retry)
 			}
 		}
 	} ()
@@ -204,7 +225,7 @@ func inputMqttLooper (_context *InputMqttContext) (error) {
 				if ! _subscribed.Load () {
 					break
 				}
-				time.Sleep (DefaultInputMqttPing)
+				time.Sleep (_configuration.Ping)
 				if ! _subscribed.Load () {
 					break
 				}

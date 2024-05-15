@@ -18,6 +18,19 @@ import "time"
 
 
 
+type InputHttpFlags struct {
+	
+	Enabled *FlagsBool `long:"input-http-enabled" value-name:"{bool}"`
+	Identifier *string `long:"input-http-identifier" value-name:"{identifier}"`
+	ListenTcp *string `long:"input-http-listen-tcp" value-name:"{ip}:{port}"`
+	Timeout *time.Duration `long:"input-http-timeout" value-name:"{duration}"`
+	AllowedPath *string `long:"input-http-allowed-path" value-name:"{path}"`
+	ParseJson *FlagsBool `long:"input-http-parse-json" value-name:"{bool}"`
+	ParseXml *FlagsBool `long:"input-http-parse-xml" value-name:"{bool}"`
+	Debug *FlagsBool `long:"input-http-debug" value-name:"{bool}"`
+}
+
+
 type InputHttpConfiguration struct {
 	
 	Identifier string

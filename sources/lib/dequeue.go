@@ -13,12 +13,24 @@ import "time"
 
 
 
+type DequeueFlags struct {
+	
+	MessagesQueueSize *uint `long:"messages-queue" value-name:"{count}"`
+	
+	ReportInterval *time.Duration `long:"report-interval" value-name:"{duration}"`
+	ReportCounter *uint `long:"report-messages" value-name:"{count}"`
+	
+	Debug *FlagsBool  //  TODO?
+}
+
+
 type DequeueConfiguration struct {
 	
-	TickerInterval time.Duration
 	ReportInterval time.Duration
 	ReportCounter uint
 	Debug bool
+	
+	TickerInterval time.Duration
 }
 
 

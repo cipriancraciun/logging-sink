@@ -18,6 +18,38 @@ import "time"
 
 
 
+type OutputFileFlags struct {
+	
+	Enabled *FlagsBool `long:"output-file-enabled" value-name:"{bool}"`
+	
+	CurrentStorePath *string `long:"output-file-current-store" value-name:"{path}"`
+	CurrentSymlinkPath *string `long:"output-file-current-symlink" value-name:"{path}"`
+	CurrentTimestamp *string `long:"output-file-current-timestamp" value-name:"{pattern} (see <https://golang.org/pkg/time/#Time.Format>)"`
+	CurrentPrefix *string `long:"output-file-current-prefix" value-name:"{token}"`
+	CurrentSuffix *string `long:"output-file-current-suffix" value-name:"{token}"`
+	
+	ArchivedStorePath *string `long:"output-file-archived-store" value-name:"{path}"`
+	ArchivedCompress *string `long:"output-file-archived-compress" choice:"none" choice:"lz4" choice:"lzo" choice:"gz" choice:"bz2" choice:"lzip" choice:"xz" choice:"zstd"`
+	ArchivedCompressLevel *uint `long:"output-file-archived-compress-level" value-name:"{level}"`
+	ArchivedTimestamp *string `long:"output-file-archived-timestamp" value-name:"{pattern} (see <https://golang.org/pkg/time/#Time.Format>)"`
+	ArchivedPrefix *string `long:"output-file-archived-prefix" value-name:"{token}"`
+	ArchivedSuffix *string `long:"output-file-archived-suffix" value-name:"{token}"`
+	
+	RotateInterval *time.Duration `long:"output-file-rotate-timeout" value-name:"{duration}"`
+	RotateCounter *uint `long:"output-file-rotate-messages" value-name:"{count}"`
+	
+	FolderMode *uint16 `long:"output-file-chmod-folders" value-name:"{octal-mode}" base:"8"`
+	FileMode *uint16 `long:"output-file-chmod-files" value-name:"{octal-mode}" base:"8"`
+	
+	BufferSize *uint `long:"output-file-buffer" value-name:"{bytes}"`
+	JsonPretty *FlagsBool `long:"output-file-json-pretty" value-name:"{bool}"`
+	JsonSequence *FlagsBool `long:"output-file-json-sequence" value-name:"{bool}"`
+	Flush *FlagsBool `long:"output-file-flush" value-name:"{bool}"`
+	QueueSize *uint `long:"output-file-queue" value-name:"{count}"`
+	Debug *FlagsBool `long:"output-file-debug" value-name:"{bool}"`
+}
+
+
 type OutputFileConfiguration struct {
 	
 	CurrentStorePath string
@@ -31,16 +63,18 @@ type OutputFileConfiguration struct {
 	ArchivedSuffix string
 	CurrentTimestamp string
 	ArchivedTimestamp string
-	Messages uint
-	Timeout time.Duration
+	RotateInterval time.Duration
+	RotateCounter uint
+	BufferSize uint
 	JsonPretty bool
 	JsonSequence bool
 	Flush bool
-	StoreMode os.FileMode
+	FolderMode os.FileMode
 	FileMode os.FileMode
-	TickerInterval time.Duration
 	QueueSize uint
 	Debug bool
+	
+	TickerInterval time.Duration
 }
 
 
@@ -202,7 +236,7 @@ func outputFileProcess (_context *OutputFileContext, _message *Message) (error) 
 	_context.currentMessages += 1
 	
 	if _context.currentFile != nil {
-		return outputStreamProcess (_context.currentFile, _message, _configuration.JsonPretty, _configuration.JsonSequence, _configuration.Flush)
+		return outputStreamProcess (_context.currentFile, _message, _configuration.JsonPretty, _configuration.JsonSequence, _configuration.Flush, _configuration.BufferSize)
 	} else {
 		return fmt.Errorf ("[eb1083ab]  output file is not opened!")
 	}
@@ -265,7 +299,7 @@ func outputFileOpen (_context *OutputFileContext) (error) {
 			_configuration.ArchivedSuffix,
 		)
 	
-	if _error := os.MkdirAll (path.Dir (_context.currentCurrentPath), _configuration.StoreMode); _error != nil {
+	if _error := os.MkdirAll (path.Dir (_context.currentCurrentPath), _configuration.FolderMode); _error != nil {
 		log.Printf ("[ee] [9e694a9c]  output file failed opening current `%s` (mkdir);  ignoring!\n", _context.currentCurrentPath)
 		logError (_error, "")
 	}
@@ -309,13 +343,13 @@ func outputFileClosePerhaps (_context *OutputFileContext) (error) {
 	_configuration := _context.configuration
 	
 	_shouldClose := false
-	if ! _shouldClose && (_context.currentMessages >= _configuration.Messages) {
+	if ! _shouldClose && (_context.currentMessages >= _configuration.RotateCounter) {
 		if _configuration.Debug {
 			log.Printf ("[ii] [6608f486]  output file reached maximum messages count limit;\n")
 		}
 		_shouldClose = true
 	}
-	if ! _shouldClose && (_context.nowTimestamp.Sub (_context.currentTimestamp) >= _configuration.Timeout) {
+	if ! _shouldClose && (_context.nowTimestamp.Sub (_context.currentTimestamp) >= _configuration.RotateInterval) {
 		if _configuration.Debug {
 			log.Printf ("[ii] [963bf22e]  output file reached maximum file age limit;\n")
 		}
@@ -363,7 +397,7 @@ func outputFileClose (_context *OutputFileContext, _wait bool) (error) {
 	}
 	
 	if _context.currentCurrentPath != _context.currentArchivedPath {
-		if _error := os.MkdirAll (path.Dir (_context.currentArchivedPath), _configuration.StoreMode); _error != nil {
+		if _error := os.MkdirAll (path.Dir (_context.currentArchivedPath), _configuration.FolderMode); _error != nil {
 			log.Printf ("[ee] [0febdcf9]  output file failed renaming previous `%s` (mkdir);  ignoring!\n", _context.currentArchivedPath)
 			logError (_error, "")
 		}
@@ -513,9 +547,9 @@ func outputFileCompress (_context *OutputFileContext, _wait bool) (error) {
 
 
 
-func outputStreamProcess (_stream *os.File, _message *Message, _pretty bool, _sequence bool, _flush bool) (error) {
+func outputStreamProcess (_stream *os.File, _message *Message, _pretty bool, _sequence bool, _flush bool, _bufferSize uint) (error) {
 	
-	_buffer := make ([]byte, 0, DefaultOutputBufferSize)
+	_buffer := make ([]byte, 0, _bufferSize)
 	
 	if _sequence {
 		_buffer = append (_buffer, []byte ("\x1e") ...)

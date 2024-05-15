@@ -17,6 +17,24 @@ import mqtt "github.com/pascaldekloe/mqtt"
 
 
 
+type OutputMqttFlags struct {
+	
+	Enabled *FlagsBool `long:"output-mqtt-enabled" value-name:"{bool}"`
+	Identifier *string `long:"output-mqtt-identifier" value-name:"{identifier}"`
+	ConnectTcp *string `long:"output-mqtt-connect-tcp" value-name:"{ip}:{port}"`
+	Topic *string `long:"output-mqtt-topic" value-name:"{topic}"`
+	Client *string `long:"output-mqtt-client" value-name:"{identifier}"`
+	Username *string `long:"output-mqtt-username" value-name:"..." default-mask:"..."`
+	Password *string `long:"output-mqtt-password" value-name:"..." default-mask:"..."`
+	CleanSession *FlagsBool `long:"output-mqtt-clean-session" value-name:"{bool}"`
+	KeepAlive *time.Duration `long:"output-mqtt-keep-alive" value-name:"{duration}"`
+	Ping *time.Duration `long:"output-mqtt-ping" value-name:"{duration}"`
+	Retry *time.Duration `long:"output-mqtt-retry" value-name:"{duration}"`
+	QueueSize *uint `long:"output-mqtt-queue-size" value-name:"{count}"`
+	Debug *FlagsBool `long:"output-mqtt-debug" value-name:"{bool}"`
+}
+
+
 type OutputMqttConfiguration struct {
 	
 	Identifier string
@@ -25,8 +43,10 @@ type OutputMqttConfiguration struct {
 	Client string
 	Username string
 	Password string
-	KeepAlive uint
 	CleanSession bool
+	KeepAlive time.Duration
+	Ping time.Duration
+	Retry time.Duration
 	QueueSize uint
 	Debug bool
 }
@@ -67,7 +87,7 @@ func outputMqttInitialize (_configuration *OutputMqttConfiguration, _messagesQue
 	_clientId := _configuration.Client
 	_clientConfig.UserName = _configuration.Username
 	_clientConfig.Password = []byte (_configuration.Password)
-	_clientConfig.KeepAlive = uint16 (_configuration.KeepAlive)
+	_clientConfig.KeepAlive = uint16 (_configuration.KeepAlive.Round (time.Second) .Seconds ())
 	_clientConfig.CleanSession = _configuration.CleanSession
 	_clientConfig.AtLeastOnceMax = 16384
 	_clientConfig.ExactlyOnceMax = 16384
@@ -160,14 +180,14 @@ func outputMqttLooper (_context *OutputMqttContext) (error) {
 				return
 			} else {
 				logError (_error, "[3b3287f9]  output mqtt failed to receive message;  retrying!")
-				time.Sleep (DefaultOutputMqttRetry)
+				time.Sleep (_configuration.Retry)
 			}
 		}
 	} ()
 	
 	go func () () {
 		for {
-			time.Sleep (DefaultOutputMqttPing)
+			time.Sleep (_configuration.Ping)
 			_cancelation := context.Background ()
 			if _configuration.Debug {
 				log.Printf ("[ii] [8c494f6c]  output mqtt pinging...\n")

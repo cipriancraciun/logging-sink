@@ -12,8 +12,21 @@ import "syscall"
 
 
 
+type OutputStdoutFlags struct {
+	
+	Enabled *FlagsBool `long:"output-stdout-enabled" value-name:"{bool}"`
+	BufferSize *uint `long:"output-stdout-buffer" value-name:"{bytes}"`
+	JsonPretty *FlagsBool `long:"output-stdout-json-pretty" value-name:"{bool}"`
+	JsonSequence *FlagsBool `long:"output-stdout-json-sequence" value-name:"{bool}"`
+	Flush *FlagsBool `long:"output-stdout-flush" value-name:"{bool}"`
+	QueueSize *uint `long:"output-stdout-queue" value-name:"{count}"`
+	Debug *FlagsBool `long:"output-stdout-debug" value-name:"{bool}"`
+}
+
+
 type OutputStdoutConfiguration struct {
 	
+	BufferSize uint
 	JsonPretty bool
 	JsonSequence bool
 	Flush bool
@@ -152,7 +165,7 @@ func outputStdoutProcess (_context *OutputStdoutContext, _message *Message) (err
 	
 	_configuration := _context.configuration
 	
-	return outputStreamProcess (_context.file, _message, _configuration.JsonPretty, _configuration.JsonSequence, _configuration.Flush)
+	return outputStreamProcess (_context.file, _message, _configuration.JsonPretty, _configuration.JsonSequence, _configuration.Flush, _configuration.BufferSize)
 }
 
 

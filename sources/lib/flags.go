@@ -3,10 +3,13 @@
 package lib
 
 
-import "flag"
+import "encoding/json"
 import "fmt"
 import "os"
 import "strings"
+import "time"
+
+import "github.com/jessevdk/go-flags"
 
 import syslog "gopkg.in/mcuadros/go-syslog.v2"
 import syslog_format "gopkg.in/mcuadros/go-syslog.v2/format"
@@ -16,343 +19,289 @@ import syslog_format "gopkg.in/mcuadros/go-syslog.v2/format"
 
 func configure (_arguments []string) (*Configuration, error) {
 	
-	_flags := flag.NewFlagSet ("haproxy-logger", flag.ContinueOnError)
+	_flags := & Flags {}
+	_flagsMeta := & MetaFlags {}
 	
-	_inputSyslogEnabled := _flags.Bool ("input-syslog", DefaultInputSyslogEnabled, "true | false")
-	_inputSyslogIdentifier := _flags.String ("input-syslog-identifier", DefaultInputSyslogIdentifier, "<identifier>")
-	_inputSyslogListenTcp := _flags.String ("input-syslog-listen-tcp", DefaultInputSyslogListenTcp, "<ip>:<port>")
-	_inputSyslogListenUdp := _flags.String ("input-syslog-listen-udp", DefaultInputSyslogListenUdp, "<ip>:<port>")
-	_inputSyslogListenUnix := _flags.String ("input-syslog-listen-unix", DefaultInputSyslogListenUnix, "<path>")
-	_inputSyslogFormatName := _flags.String ("input-syslog-format", DefaultInputSyslogFormat, "rfc3164 | rfc5424")
-	_inputSyslogParseJson := _flags.Bool ("input-syslog-json", DefaultInputSyslogParseJson, "true | false")
-	_inputSyslogParseXml := _flags.Bool ("input-syslog-xml", DefaultInputSyslogParseXml, "true | false")
-	_inputSyslogDebug := _flags.Bool ("input-syslog-debug", DefaultInputSyslogDebug, "true | false")
-	
-	_inputHttpEnabled := _flags.Bool ("input-http", DefaultInputHttpEnabled, "true | false")
-	_inputHttpIdentifier := _flags.String ("input-http-identifier", DefaultInputHttpIdentifier, "<identifier>")
-	_inputHttpListenTcp := _flags.String ("input-http-listen-tcp", DefaultInputHttpListenTcp, "<ip>:<port>")
-	_inputHttpAllowedPath := _flags.String ("input-http-allowed-path", DefaultInputHttpAllowedPath, "<path>")
-	_inputHttpParseJson := _flags.Bool ("input-http-json", DefaultInputHttpParseJson, "true | false")
-	_inputHttpParseXml := _flags.Bool ("input-http-xml", DefaultInputHttpParseXml, "true | false")
-	_inputHttpDebug := _flags.Bool ("input-http-debug", DefaultInputHttpDebug, "true | false")
-	
-	_inputMqttEnabled := _flags.Bool ("input-mqtt", DefaultInputMqttEnabled, "true | false")
-	_inputMqttIdentifier := _flags.String ("input-mqtt-identifier", DefaultInputMqttIdentifier, "<identifier>")
-	_inputMqttConnectTcp := _flags.String ("input-mqtt-connect-tcp", DefaultInputMqttConnectTcp, "<ip>:<port>")
-	_inputMqttTopic := _flags.String ("input-mqtt-topic", DefaultInputMqttTopic, "<topic>")
-	_inputMqttClient := _flags.String ("input-mqtt-client", DefaultInputMqttClient, "<client-id>")
-	_inputMqttUsername := _flags.String ("input-mqtt-username", DefaultInputMqttUsername, "<username>")
-	_inputMqttPassword := _flags.String ("input-mqtt-password", DefaultInputMqttPassword, "<password>")
-	_inputMqttKeepAlive := _flags.Uint ("input-mqtt-keep-alive", DefaultInputMqttKeepAlive, "<seconds>")
-	_inputMqttCleanSession := _flags.Bool ("input-mqtt-clean-session", DefaultInputMqttCleanSession, "true | false")
-	_inputMqttParseJson := _flags.Bool ("input-mqtt-json", DefaultInputMqttParseJson, "true | false")
-	_inputMqttParseXml := _flags.Bool ("input-mqtt-xml", DefaultInputMqttParseXml, "true | false")
-	_inputMqttDebug := _flags.Bool ("input-mqtt-debug", DefaultInputMqttDebug, "true | false")
-	
-	_outputStdoutEnabled := _flags.Bool ("output-stdout", DefaultOutputStdoutEnabled, "true | false")
-	_outputStdoutJsonPretty := _flags.Bool ("output-stdout-json-pretty", DefaultOutputStdoutJsonPretty, "true | false")
-	_outputStdoutJsonSequence := _flags.Bool ("output-stdout-json-sequence", DefaultOutputStdoutJsonSequence, "true | false")
-	_outputStdoutFlush := _flags.Bool ("output-stdout-flush", DefaultOutputStdoutFlush, "true | false")
-	_outputStdoutQueueSize := _flags.Uint ("output-stdout-queue", DefaultOutputStdoutQueueSize, "<size>")
-	_outputStdoutDebug := _flags.Bool ("output-stdout-debug", DefaultOutputStdoutDebug, "true | false")
-	
-	_outputFileEnabled := _flags.Bool ("output-file", DefaultOutputFileEnabled, "true | false")
-	_outputFileCurrentStorePath := _flags.String ("output-file-current-store", DefaultOutputFileCurrentStorePath, "<path>")
-	_outputFileCurrentSymlinkPath := _flags.String ("output-file-current-symlink", DefaultOutputFileCurrentSymlinkPath, "<path>")
-	_outputFileArchivedStorePath := _flags.String ("output-file-archived-store", DefaultOutputFileArchivedStorePath, "<path>")
-	_outputFileArchivedCompress := _flags.String ("output-file-archived-compress", DefaultOutputFileArchivedCompress, "none | lz4 | lzo | gz | bz2 | lzip | xz | zstd")
-	_outputFileArchivedCompressLevel := _flags.Uint ("output-file-archived-compress-level", DefaultOutputFileArchivedCompressLevel, "<level> (see manual for each compressor)")
-	_outputFileCurrentPrefix := _flags.String ("output-file-current-prefix", DefaultOutputFileCurrentPrefix, "<prefix>")
-	_outputFileArchivedPrefix := _flags.String ("output-file-archived-prefix", DefaultOutputFileArchivedPrefix, "<prefix>")
-	_outputFileCurrentSuffix := _flags.String ("output-file-current-suffix", DefaultOutputFileCurrentSuffix, "<suffix>")
-	_outputFileArchivedSuffix := _flags.String ("output-file-archived-suffix", DefaultOutputFileArchivedSuffix, "<suffix>")
-	_outputFileCurrentTimestamp := _flags.String ("output-file-current-timestamp", DefaultOutputFileCurrentTimestamp, "<format> (see https://golang.org/pkg/time/#Time.Format)")
-	_outputFileArchivedTimestamp := _flags.String ("output-file-archived-timestamp", DefaultOutputFileArchivedTimestamp, "<format> (see https://golang.org/pkg/time/#Time.Format)")
-	_outputFileMessages := _flags.Uint ("output-file-messages", DefaultOutputFileMessages, "<count>")
-	_outputFileTimeout := _flags.Duration ("output-file-timeout", DefaultOutputFileTimeout, "<duration>")
-	_outputFileJsonPretty := _flags.Bool ("output-file-json-pretty", DefaultOutputFileJsonPretty, "true | false")
-	_outputFileJsonSequence := _flags.Bool ("output-file-json-sequence", DefaultOutputFileJsonSequence, "true | false")
-	_outputFileFlush := _flags.Bool ("output-file-flush", DefaultOutputFileFlush, "true | false")
-	_outputFileQueueSize := _flags.Uint ("output-file-queue", DefaultOutputFileQueueSize, "<size>")
-	_outputFileDebug := _flags.Bool ("output-file-debug", DefaultOutputFileDebug, "true | false")
-	
-	_outputMqttEnabled := _flags.Bool ("output-mqtt", DefaultOutputMqttEnabled, "true | false")
-	_outputMqttIdentifier := _flags.String ("output-mqtt-identifier", DefaultOutputMqttIdentifier, "<identifier>")
-	_outputMqttConnectTcp := _flags.String ("output-mqtt-connect-tcp", DefaultOutputMqttConnectTcp, "<ip>:<port>")
-	_outputMqttTopic := _flags.String ("output-mqtt-topic", DefaultOutputMqttTopic, "<topic>")
-	_outputMqttClient := _flags.String ("output-mqtt-client", DefaultOutputMqttClient, "<client-id>")
-	_outputMqttUsername := _flags.String ("output-mqtt-username", DefaultOutputMqttUsername, "<username>")
-	_outputMqttPassword := _flags.String ("output-mqtt-password", DefaultOutputMqttPassword, "<password>")
-	_outputMqttKeepAlive := _flags.Uint ("output-mqtt-keep-alive", DefaultOutputMqttKeepAlive, "<seconds>")
-	_outputMqttCleanSession := _flags.Bool ("output-mqtt-clean-session", DefaultOutputMqttCleanSession, "true | false")
-	_outputMqttQueueSize := _flags.Uint ("output-mqtt-queue", DefaultOutputMqttQueueSize, "<size>")
-	_outputMqttDebug := _flags.Bool ("output-mqtt-debug", DefaultOutputMqttDebug, "true | false")
-	
-	_dequeueReportInterval := _flags.Duration ("report-timeout", DefaultDequeueReportInterval, "<duration>")
-	_dequeueReportCounter := _flags.Uint ("report-messages", DefaultDequeueReportCounter, "<count>")
-	
-	_parserMessageRaw := _flags.Bool ("parser-message-raw", DefaultParserMessageRaw, "true | false")
-	_parserMessageSha256 := _flags.Bool ("parser-message-sha256", DefaultParserMessageSha256, "true | false")
-	_parserExternalCommand := _flags.String ("parser-external-command", "", "<command> <argument> ...")
-	_parserExternalScript := _flags.String ("parser-external-script", "", "<script>")
-	_parserExternalReplace := _flags.Bool ("parser-external-replace", DefaultParserExternalReplace, "true | false")
-	_parserDebug := _flags.Bool ("parser-debug", DefaultParserDebug, "true | false")
-	
-	_messagesQueueSize := _flags.Uint ("messages-queue", DefaultMessagesQueueSize, "<size>")
-	
-	_forcedDebug := _flags.Bool ("debug", false, "true | false")
-	
-	_globalDebug := DefaultGlobalDebug || *_forcedDebug
-	
-	
-	if error := _flags.Parse (_arguments); error != nil {
-		return nil, error
+	{
+		_parser := flags.NewNamedParser ("logging-sink", flags.PassDoubleDash)
+		if _, _error := _parser.AddGroup ("", "", _flags); _error != nil {
+			return nil, _error
+		}
+		if _, _error := _parser.AddGroup ("Meta options", "", _flagsMeta); _error != nil {
+			return nil, _error
+		}
+		
+		if _restArguments, _error := _parser.ParseArgs (_arguments); _error == nil {
+			if len (_restArguments) > 0 {
+				return nil, fmt.Errorf ("[5a0e956a]  unexpected additional arguments:  `%v`!", _restArguments)
+			}
+		} else {
+			return nil, fmt.Errorf ("[e8668b22]  failed to parse arguments:  %s!", _error)
+		}
+		
+		if _flagsMeta.Help {
+			_parser.WriteHelp (os.Stderr)
+			os.Exit (0)
+		}
+		if _flagsMeta.DumpFlags {
+			_ini := flags.NewIniParser (_parser)
+			_ini.Write (os.Stdout, flags.IniNone)
+			os.Exit (0)
+		}
 	}
 	
-	if _flags.NArg () > 0 {
-		return nil, fmt.Errorf ("[5a0e956a]  unexpected additional arguments:  `%v`!", _flags.Args ())
-	}
+	_forcedDebug := flagBoolOrDefault (_flags.Global.Debug, false)
 	
+	_globalDebug := DefaultGlobalDebug || _forcedDebug
 	
 	var _inputSyslogConfiguration *InputSyslogConfiguration = nil
-	if (*_inputSyslogListenTcp != "") || (*_inputSyslogListenUdp != "") || (*_inputSyslogListenUnix != "") {
-		*_inputSyslogEnabled = true
-	}
-	if *_inputSyslogEnabled {
-		var _inputSyslogFormatParser syslog_format.Format = nil
-		switch *_inputSyslogFormatName {
+	if (_flags.InputSyslog != nil) && flagBoolOrDefault (_flags.InputSyslog.Enabled, DefaultInputSyslogEnabled) {
+		_inputSyslogProtocol := flagStringOrDefault (_flags.InputSyslog.Protocol, DefaultInputSyslogProtocol)
+		var _inputSyslogParser syslog_format.Format = nil
+		switch _inputSyslogProtocol {
 			case "rfc3164" :
-				_inputSyslogFormatParser = syslog.RFC3164
+				_inputSyslogParser = syslog.RFC3164
 			case "rfc5424" :
-				_inputSyslogFormatParser = syslog.RFC5424
+				_inputSyslogParser = syslog.RFC5424
 			default :
-				return nil, fmt.Errorf ("[a87e7a5f]  invalid `input-syslog-format` value:  `%s`!", *_inputSyslogFormatName)
+				return nil, fmt.Errorf ("[a87e7a5f]  invalid `input-syslog-protocol` value:  `%s`!", _inputSyslogProtocol)
 		}
 		_inputSyslogConfiguration = & InputSyslogConfiguration {
-				Identifier : *_inputSyslogIdentifier,
-				ListenTcp : *_inputSyslogListenTcp,
-				ListenUdp : *_inputSyslogListenUdp,
-				ListenUnix : *_inputSyslogListenUnix,
-				Timeout : DefaultInputSyslogTimeout,
-				FormatName : *_inputSyslogFormatName,
-				FormatParser : _inputSyslogFormatParser,
-				ParseJson : *_inputSyslogParseJson,
-				ParseXml : *_inputSyslogParseXml,
-				Debug : *_inputSyslogDebug || *_forcedDebug,
+				Identifier : flagStringOrDefault (_flags.InputSyslog.Identifier, DefaultInputSyslogIdentifier),
+				ListenTcp : flagStringOrDefault (_flags.InputSyslog.ListenTcp, DefaultInputSyslogListenTcp),
+				ListenUdp : flagStringOrDefault (_flags.InputSyslog.ListenUdp, DefaultInputSyslogListenUdp),
+				ListenUnix : flagStringOrDefault (_flags.InputSyslog.ListenUnix, DefaultInputSyslogListenUnix),
+				Timeout : flagDurationOrDefault (_flags.InputSyslog.Timeout, DefaultInputSyslogTimeout),
+				Protocol : _inputSyslogProtocol,
+				Parser : _inputSyslogParser,
+				ParseJson : flagBoolOrDefault (_flags.InputSyslog.ParseJson, DefaultInputSyslogParseJson),
+				ParseXml : flagBoolOrDefault (_flags.InputSyslog.ParseXml, DefaultInputSyslogParseXml),
+				Debug : flagBoolOrDefault (_flags.InputSyslog.Debug, DefaultInputSyslogDebug || _forcedDebug),
 			}
 		_globalDebug = _globalDebug || _inputSyslogConfiguration.Debug
 	}
 	
-	
 	var _inputHttpConfiguration *InputHttpConfiguration = nil
-	if *_inputHttpListenTcp != "" {
-		*_inputHttpEnabled = true
-	}
-	if *_inputHttpEnabled {
+	if (_flags.InputHttp != nil) && flagBoolOrDefault (_flags.InputHttp.Enabled, DefaultInputHttpEnabled) {
 		_inputHttpConfiguration = & InputHttpConfiguration {
-				Identifier : *_inputHttpIdentifier,
-				ListenTcp : *_inputHttpListenTcp,
-				Timeout : DefaultInputHttpTimeout,
-				AllowedPath : *_inputHttpAllowedPath,
-				ParseJson : *_inputHttpParseJson,
-				ParseXml : *_inputHttpParseXml,
-				Debug : *_inputHttpDebug || *_forcedDebug,
+				Identifier : flagStringOrDefault (_flags.InputHttp.Identifier, DefaultInputHttpIdentifier),
+				ListenTcp : flagStringOrDefault (_flags.InputHttp.ListenTcp, DefaultInputHttpListenTcp),
+				Timeout : flagDurationOrDefault (_flags.InputHttp.Timeout, DefaultInputHttpTimeout),
+				AllowedPath : flagStringOrDefault (_flags.InputHttp.AllowedPath, DefaultInputHttpAllowedPath),
+				ParseJson : flagBoolOrDefault (_flags.InputHttp.ParseJson, DefaultInputHttpParseJson),
+				ParseXml : flagBoolOrDefault (_flags.InputHttp.ParseXml, DefaultInputHttpParseXml),
+				Debug : flagBoolOrDefault (_flags.InputHttp.Debug, DefaultInputHttpDebug || _forcedDebug),
 			}
 		_globalDebug = _globalDebug || _inputHttpConfiguration.Debug
 	}
 	
 	
 	var _inputMqttConfiguration *InputMqttConfiguration = nil
-	if *_inputMqttConnectTcp != "" {
-		*_inputMqttEnabled = true
-	}
-	if *_inputMqttEnabled {
+	if (_flags.InputMqtt != nil) && flagBoolOrDefault (_flags.InputMqtt.Enabled, DefaultInputMqttEnabled) {
 		_inputMqttConfiguration = & InputMqttConfiguration {
-				Identifier : *_inputMqttIdentifier,
-				ConnectTcp : *_inputMqttConnectTcp,
-				Topic : *_inputMqttTopic,
-				Client : *_inputMqttClient,
-				Username : *_inputMqttUsername,
-				Password : *_inputMqttPassword,
-				KeepAlive : *_inputMqttKeepAlive,
-				CleanSession : *_inputMqttCleanSession,
-				ParseJson : *_inputMqttParseJson,
-				ParseXml : *_inputMqttParseXml,
-				Debug : *_inputMqttDebug || *_forcedDebug,
+				Identifier : flagStringOrDefault (_flags.InputMqtt.Identifier, DefaultInputMqttIdentifier),
+				ConnectTcp : flagStringOrDefault (_flags.InputMqtt.ConnectTcp, DefaultInputMqttConnectTcp),
+				Topic : flagStringOrDefault (_flags.InputMqtt.Topic, DefaultInputMqttTopic),
+				Client : flagStringOrDefault (_flags.InputMqtt.Client, DefaultInputMqttClient),
+				Username : flagStringOrDefault (_flags.InputMqtt.Username, DefaultInputMqttUsername),
+				Password : flagStringOrDefault (_flags.InputMqtt.Password, DefaultInputMqttPassword),
+				CleanSession : flagBoolOrDefault (_flags.InputMqtt.CleanSession, DefaultInputMqttCleanSession),
+				KeepAlive : flagDurationOrDefault (_flags.InputMqtt.KeepAlive, DefaultInputMqttKeepAlive),
+				Ping : flagDurationOrDefault (_flags.InputMqtt.Ping, DefaultInputMqttPing),
+				Retry : flagDurationOrDefault (_flags.InputMqtt.Retry, DefaultInputMqttRetry),
+				ParseJson : flagBoolOrDefault (_flags.InputMqtt.ParseJson, DefaultInputMqttParseJson),
+				ParseXml : flagBoolOrDefault (_flags.InputMqtt.ParseXml, DefaultInputMqttParseXml),
+				Debug : flagBoolOrDefault (_flags.InputMqtt.Debug, DefaultInputMqttDebug) || _forcedDebug,
 			}
 		_globalDebug = _globalDebug || _inputMqttConfiguration.Debug
 	}
 	
 	
 	var _outputStdoutConfiguration *OutputStdoutConfiguration = nil
-	if *_outputStdoutEnabled {
+	if (_flags.OutputStdout != nil) && flagBoolOrDefault (_flags.OutputStdout.Enabled, DefaultOutputStdoutEnabled) {
 		_outputStdoutConfiguration = & OutputStdoutConfiguration {
-				JsonPretty : *_outputStdoutJsonPretty,
-				JsonSequence : *_outputStdoutJsonSequence,
-				Flush : *_outputStdoutFlush,
-				QueueSize : *_outputStdoutQueueSize,
-				Debug : *_outputStdoutDebug || *_forcedDebug,
+				BufferSize : flagUintOrDefault (_flags.OutputStdout.BufferSize, DefaultOutputStdoutBufferSize),
+				JsonPretty : flagBoolOrDefault (_flags.OutputStdout.JsonPretty, DefaultOutputStdoutJsonPretty),
+				JsonSequence : flagBoolOrDefault (_flags.OutputStdout.JsonSequence, DefaultOutputStdoutJsonSequence),
+				Flush : flagBoolOrDefault (_flags.OutputStdout.Flush, DefaultOutputStdoutFlush),
+				QueueSize : flagUintOrDefault (_flags.OutputStdout.QueueSize, DefaultOutputStdoutQueueSize),
+				Debug : flagBoolOrDefault (_flags.OutputStdout.Debug, DefaultOutputStdoutDebug),
 			}
 		_globalDebug = _globalDebug || _outputStdoutConfiguration.Debug
 	}
 	
 	
 	var _outputFileConfiguration *OutputFileConfiguration = nil
-	if (*_outputFileCurrentStorePath != "") || (*_outputFileArchivedStorePath != "") {
-		*_outputFileEnabled = true
-	}
-	if *_outputFileEnabled {
-		var _outputFileArchivedCompressCommand []string = nil
-		var _outputFileArchivedCompressSuffix string = ""
-		if *_outputFileCurrentStorePath == "" {
+	if (_flags.OutputFile != nil) && flagBoolOrDefault (_flags.OutputFile.Enabled, DefaultOutputFileEnabled) {
+		_outputFileCurrentSymlinkPath := flagStringOrDefault (_flags.OutputFile.CurrentSymlinkPath, DefaultOutputFileCurrentSymlinkPath)
+		_outputFileCurrentStorePath := flagStringOrDefault (_flags.OutputFile.CurrentStorePath, DefaultOutputFileCurrentStorePath)
+		if _outputFileCurrentStorePath == "" {
 			return nil, fmt.Errorf ("[4ca2fdb7]  expected `output-file-current-store`!")
 		}
-		if *_outputFileCurrentStorePath != "" {
-			if _stat, _error := os.Stat (*_outputFileCurrentStorePath); _error == nil {
+		if _outputFileCurrentStorePath != "" {
+			if _stat, _error := os.Stat (_outputFileCurrentStorePath); _error == nil {
 				if ! _stat.IsDir () {
-					return nil, fmt.Errorf ("[65696d6c]  invalid `output-file-current-store` (not a folder):  `%s`!", *_outputFileCurrentStorePath)
+					return nil, fmt.Errorf ("[65696d6c]  invalid `output-file-current-store` (not a folder):  `%s`!", _outputFileCurrentStorePath)
 				}
 			} else if os.IsNotExist (_error) {
-				return nil, fmt.Errorf ("[f11abf34]  invalid `output-file-current-store` (does not exist):  `%s`!", *_outputFileCurrentStorePath)
+				return nil, fmt.Errorf ("[f11abf34]  invalid `output-file-current-store` (does not exist):  `%s`!", _outputFileCurrentStorePath)
 			} else {
 				return nil, _error
 			}
 		}
-		if *_outputFileArchivedStorePath != "" {
-			if _stat, _error := os.Stat (*_outputFileArchivedStorePath); _error == nil {
+		_outputFileArchivedStorePath := flagStringOrDefault (_flags.OutputFile.ArchivedStorePath, DefaultOutputFileArchivedStorePath)
+		if _outputFileArchivedStorePath != "" {
+			if _stat, _error := os.Stat (_outputFileArchivedStorePath); _error == nil {
 				if ! _stat.IsDir () {
-					return nil, fmt.Errorf ("[6b395329]  invalid `output-file-archived-store` (not a folder):  `%s`!", *_outputFileArchivedStorePath)
+					return nil, fmt.Errorf ("[6b395329]  invalid `output-file-archived-store` (not a folder):  `%s`!", _outputFileArchivedStorePath)
 				}
 			} else if os.IsNotExist (_error) {
-				return nil, fmt.Errorf ("[c5fd42a7]  invalid `output-file-archived-store` (does not exist):  `%s`!", *_outputFileArchivedStorePath)
+				return nil, fmt.Errorf ("[c5fd42a7]  invalid `output-file-archived-store` (does not exist):  `%s`!", _outputFileArchivedStorePath)
 			} else {
 				return nil, _error
 			}
 		} else {
 			_outputFileArchivedStorePath = _outputFileCurrentStorePath
 		}
-		_level := fmt.Sprintf ("-%d", *_outputFileArchivedCompressLevel)
-		switch *_outputFileArchivedCompress {
+		_outputFileArchivedCompress := flagStringOrDefault (_flags.OutputFile.ArchivedCompress, DefaultOutputFileArchivedCompress)
+		_outputFileArchivedCompressLevel := flagUintOrDefault (_flags.OutputFile.ArchivedCompressLevel, DefaultOutputFileArchivedCompressLevel)
+		_outputFileArchivedCompressLevelArgument := fmt.Sprintf ("-%d", _outputFileArchivedCompressLevel)
+		var _outputFileArchivedCompressCommand []string = nil
+		var _outputFileArchivedCompressSuffix string = ""
+		switch _outputFileArchivedCompress {
 			case "none" :
+				break
 			case "lz4" :
 				_outputFileArchivedCompressCommand = []string {
-						"lz4", _level,
+						"lz4", _outputFileArchivedCompressLevelArgument,
 					}
 				_outputFileArchivedCompressSuffix = ".lz4"
 			case "lzo" :
 				_outputFileArchivedCompressCommand = []string {
-						"lzop", _level,
+						"lzop", _outputFileArchivedCompressLevelArgument,
 					}
 				_outputFileArchivedCompressSuffix = ".lzo"
 			case "gz" :
 				_outputFileArchivedCompressCommand = []string {
-						"gzip", _level,
+						"gzip", _outputFileArchivedCompressLevelArgument,
 					}
 				_outputFileArchivedCompressSuffix = ".gz"
 			case "bz2" :
 				_outputFileArchivedCompressCommand = []string {
-						"bzip2", _level,
+						"bzip2", _outputFileArchivedCompressLevelArgument,
 					}
 				_outputFileArchivedCompressSuffix = ".bz2"
 			case "lzip" :
 				_outputFileArchivedCompressCommand = []string {
-						"lzip", _level,
+						"lzip", _outputFileArchivedCompressLevelArgument,
 					}
 				_outputFileArchivedCompressSuffix = ".lz"
 			case "xz" :
 				_outputFileArchivedCompressCommand = []string {
-						"xz", _level, "-F", "xz", "-C", "sha256", "-T", "1",
+						"xz", _outputFileArchivedCompressLevelArgument, "-F", "xz", "-C", "sha256", "-T", "1",
 					}
 				_outputFileArchivedCompressSuffix = ".xz"
 			case "zstd" :
 				_outputFileArchivedCompressCommand = []string {
-						"zstd", _level, "-z", "-q",
+						"zstd", _outputFileArchivedCompressLevelArgument, "-z", "-q",
 					}
 				_outputFileArchivedCompressSuffix = ".zst"
 			default :
-				return nil, fmt.Errorf ("[aa5e00d4]  invalid `output-file-archived-compress` value:  `%s`!", *_outputFileArchivedCompress)
+				return nil, fmt.Errorf ("[aa5e00d4]  invalid `output-file-archived-compress` value:  `%s`!", _outputFileArchivedCompress)
 		}
 		_outputFileConfiguration = & OutputFileConfiguration {
-				CurrentStorePath : *_outputFileCurrentStorePath,
-				CurrentSymlinkPath : *_outputFileCurrentSymlinkPath,
-				ArchivedStorePath : *_outputFileArchivedStorePath,
+				CurrentStorePath : _outputFileCurrentStorePath,
+				CurrentSymlinkPath : _outputFileCurrentSymlinkPath,
+				ArchivedStorePath : _outputFileArchivedStorePath,
 				ArchivedCompressCommand : _outputFileArchivedCompressCommand,
 				ArchivedCompressSuffix : _outputFileArchivedCompressSuffix,
-				CurrentPrefix : *_outputFileCurrentPrefix,
-				ArchivedPrefix : *_outputFileArchivedPrefix,
-				CurrentSuffix : *_outputFileCurrentSuffix,
-				ArchivedSuffix : *_outputFileArchivedSuffix,
-				CurrentTimestamp : *_outputFileCurrentTimestamp,
-				ArchivedTimestamp : *_outputFileArchivedTimestamp,
-				Messages : *_outputFileMessages,
-				Timeout : *_outputFileTimeout,
-				JsonPretty : *_outputFileJsonPretty,
-				JsonSequence : *_outputFileJsonSequence,
-				Flush : *_outputFileFlush,
-				StoreMode : DefaultOutputFileStoreMode,
-				FileMode : DefaultOutputFileFileMode,
+				CurrentPrefix : flagStringOrDefault (_flags.OutputFile.CurrentPrefix, DefaultOutputFileCurrentPrefix),
+				ArchivedPrefix : flagStringOrDefault (_flags.OutputFile.ArchivedPrefix, DefaultOutputFileArchivedPrefix),
+				CurrentSuffix : flagStringOrDefault (_flags.OutputFile.CurrentSuffix, DefaultOutputFileCurrentSuffix),
+				ArchivedSuffix : flagStringOrDefault (_flags.OutputFile.ArchivedSuffix, DefaultOutputFileArchivedSuffix),
+				CurrentTimestamp : flagStringOrDefault (_flags.OutputFile.CurrentTimestamp, DefaultOutputFileCurrentTimestamp),
+				ArchivedTimestamp : flagStringOrDefault (_flags.OutputFile.ArchivedTimestamp, DefaultOutputFileArchivedTimestamp),
+				RotateInterval : flagDurationOrDefault (_flags.OutputFile.RotateInterval, DefaultOutputFileRotateInterval),
+				RotateCounter : flagUintOrDefault (_flags.OutputFile.RotateCounter, DefaultOutputFileRotateCounter),
+				FolderMode : os.FileMode (flagUint16OrDefault (_flags.OutputFile.FolderMode, DefaultOutputFileFolderMode) & 0777),
+				FileMode : os.FileMode (flagUint16OrDefault (_flags.OutputFile.FileMode, DefaultOutputFileFileMode) & 0777),
+				BufferSize : flagUintOrDefault (_flags.OutputFile.BufferSize, DefaultOutputFileBufferSize),
+				JsonPretty : flagBoolOrDefault (_flags.OutputFile.JsonPretty, DefaultOutputFileJsonPretty),
+				JsonSequence : flagBoolOrDefault (_flags.OutputFile.JsonSequence, DefaultOutputFileJsonSequence),
+				Flush : flagBoolOrDefault (_flags.OutputFile.Flush, DefaultOutputFileFlush),
+				QueueSize : flagUintOrDefault (_flags.OutputFile.QueueSize, DefaultOutputFileQueueSize),
+				Debug : flagBoolOrDefault (_flags.OutputFile.Debug, DefaultOutputFileDebug),
 				TickerInterval : DefaultOutputFileTickerInterval,
-				QueueSize : *_outputFileQueueSize,
-				Debug : *_outputFileDebug || *_forcedDebug,
 			}
 		_globalDebug = _globalDebug || _outputFileConfiguration.Debug
 	}
 	
 	
 	var _outputMqttConfiguration *OutputMqttConfiguration = nil
-	if *_outputMqttConnectTcp != "" {
-		*_outputMqttEnabled = true
-	}
-	if *_outputMqttEnabled {
+	if (_flags.OutputMqtt != nil) && flagBoolOrDefault (_flags.OutputMqtt.Enabled, DefaultOutputMqttEnabled) {
 		_outputMqttConfiguration = & OutputMqttConfiguration {
-				Identifier : *_outputMqttIdentifier,
-				ConnectTcp : *_outputMqttConnectTcp,
-				Topic : *_outputMqttTopic,
-				Client : *_outputMqttClient,
-				Username : *_outputMqttUsername,
-				Password : *_outputMqttPassword,
-				KeepAlive : *_outputMqttKeepAlive,
-				CleanSession : *_outputMqttCleanSession,
-				QueueSize : *_outputMqttQueueSize,
-				Debug : *_outputMqttDebug || *_forcedDebug,
+				Identifier : flagStringOrDefault (_flags.OutputMqtt.Identifier, DefaultOutputMqttIdentifier),
+				ConnectTcp : flagStringOrDefault (_flags.OutputMqtt.ConnectTcp, DefaultOutputMqttConnectTcp),
+				Topic : flagStringOrDefault (_flags.OutputMqtt.Topic, DefaultOutputMqttTopic),
+				Client : flagStringOrDefault (_flags.OutputMqtt.Client, DefaultOutputMqttClient),
+				Username : flagStringOrDefault (_flags.OutputMqtt.Username, DefaultOutputMqttUsername),
+				Password : flagStringOrDefault (_flags.OutputMqtt.Password, DefaultOutputMqttPassword),
+				CleanSession : flagBoolOrDefault (_flags.OutputMqtt.CleanSession, DefaultOutputMqttCleanSession),
+				KeepAlive : flagDurationOrDefault (_flags.OutputMqtt.KeepAlive, DefaultOutputMqttKeepAlive),
+				Ping : flagDurationOrDefault (_flags.OutputMqtt.Ping, DefaultOutputMqttPing),
+				Retry : flagDurationOrDefault (_flags.OutputMqtt.Retry, DefaultOutputMqttRetry),
+				QueueSize : flagUintOrDefault (_flags.OutputMqtt.QueueSize, DefaultOutputMqttQueueSize),
+				Debug : flagBoolOrDefault (_flags.OutputMqtt.Debug, DefaultOutputMqttDebug) || _forcedDebug,
 			}
 		_globalDebug = _globalDebug || _outputMqttConfiguration.Debug
 	}
 	
-	
-	_dequeueConfiguration := & DequeueConfiguration {
-			TickerInterval : DefaultDequeueTickerInterval,
-			ReportInterval : *_dequeueReportInterval,
-			ReportCounter : *_dequeueReportCounter,
-			Debug : DefaultDequeueDebug || *_forcedDebug,
-		}
-	_globalDebug = _globalDebug || _dequeueConfiguration.Debug
-	
-	
-	var _parserExternalCommand_0 []string = nil
-	if *_parserExternalCommand != "" {
-		_parserExternalCommand_0 = strings.Split (strings.TrimSpace (*_parserExternalCommand), " ")
-		if *_parserExternalScript != "" {
-			for _argumentIndex, _argumentValue := range _parserExternalCommand_0[1:] {
-				if _argumentValue == "@{script}" {
-					_parserExternalCommand_0[_argumentIndex + 1] = *_parserExternalScript
-				}
+	var _dequeueConfiguration *DequeueConfiguration = nil
+	if _flags.Dequeue == nil {
+		_flags.Dequeue = & DequeueFlags {}
+	}
+	{
+		_dequeueConfiguration = & DequeueConfiguration {
+				ReportInterval : flagDurationOrDefault (_flags.Dequeue.ReportInterval, DefaultDequeueReportInterval),
+				ReportCounter : flagUintOrDefault (_flags.Dequeue.ReportCounter, DefaultDequeueReportCounter),
+				Debug : flagBoolOrDefault (_flags.Dequeue.Debug, DefaultDequeueDebug) || _forcedDebug,
+				TickerInterval : DefaultDequeueTickerInterval,
 			}
-		}
-	} else if *_parserExternalScript != "" {
-		_parserExternalCommand_0 = []string {
-				"sh", "-c", *_parserExternalScript,
-			}
+		_globalDebug = _globalDebug || _dequeueConfiguration.Debug
 	}
 	
-	_parserConfiguration := & ParserConfiguration {
-			MessageRaw : *_parserMessageRaw,
-			MessageSha256 : *_parserMessageSha256,
-			ExternalCommand : _parserExternalCommand_0,
-			ExternalReplace : *_parserExternalReplace,
-			Debug : *_parserDebug || *_forcedDebug,
+	
+	var _parserConfiguration *ParserConfiguration
+	if _flags.Parser == nil {
+		_flags.Parser = & ParserFlags {}
+	}
+	{
+		_parserExternalCommand_0 := flagStringOrDefault (_flags.Parser.ExternalCommand, "")
+		_parserExternalScript := flagStringOrDefault (_flags.Parser.ExternalScript, "")
+		var _parserExternalCommand []string = nil
+		if _parserExternalCommand_0 != "" {
+			_parserExternalCommand = strings.Split (strings.TrimSpace (_parserExternalCommand_0), " ")
+			if _parserExternalScript != "" {
+				for _argumentIndex, _argumentValue := range _parserExternalCommand[1:] {
+					if _argumentValue == "@{script}" {
+						_parserExternalCommand[_argumentIndex + 1] = _parserExternalScript
+					}
+				}
+			}
+		} else if _parserExternalScript != "" {
+			_parserExternalCommand = []string {
+					"sh", "-c", _parserExternalScript,
+				}
 		}
-	_globalDebug = _globalDebug || _parserConfiguration.Debug
+		_parserConfiguration = & ParserConfiguration {
+				MessageRaw : flagBoolOrDefault (_flags.Parser.MessageRaw, DefaultParserMessageRaw),
+				MessageSha256 : flagBoolOrDefault (_flags.Parser.MessageSha256, DefaultParserMessageSha256),
+				ExternalCommand : _parserExternalCommand,
+				ExternalReplace : flagBoolOrDefault (_flags.Parser.ExternalReplace, DefaultParserExternalReplace),
+				Debug : flagBoolOrDefault (_flags.Parser.Debug, DefaultParserDebug || _forcedDebug),
+			}
+		_globalDebug = _globalDebug || _parserConfiguration.Debug
+	}
 	
 	
 	_configuration := & Configuration {
@@ -364,11 +313,89 @@ func configure (_arguments []string) (*Configuration, error) {
 			OutputMqtt : _outputMqttConfiguration,
 			Dequeue : _dequeueConfiguration,
 			Parser : _parserConfiguration,
-			MessagesQueueSize : *_messagesQueueSize,
+			MessagesQueueSize : flagUintOrDefault (_flags.Dequeue.MessagesQueueSize, DefaultMessagesQueueSize),
 			Debug : _globalDebug,
 		}
+	
+	if _flagsMeta.DumpConfiguration {
+		_encoder := json.NewEncoder (os.Stdout)
+		_encoder.SetIndent ("", "    ")
+		if _error := _encoder.Encode (_configuration); _error != nil {
+			return nil, _error
+		}
+		os.Exit (0)
+	}
 	
 	return _configuration, nil
 }
 
+
+
+
+func flagBoolOrDefault (_value *FlagsBool, _default bool) (bool) {
+	if _value != nil {
+		return bool (*_value)
+	}
+	return _default
+}
+
+func flagUintOrDefault (_value *uint, _default uint) (uint) {
+	if _value != nil {
+		return *_value
+	}
+	return _default
+}
+
+func flagUint16OrDefault (_value *uint16, _default uint16) (uint16) {
+	if _value != nil {
+		return *_value
+	}
+	return _default
+}
+
+func flagStringOrDefault (_value *string, _default string) (string) {
+	if _value != nil {
+		return *_value
+	}
+	return _default
+}
+
+func flagDurationOrDefault (_value *time.Duration, _default time.Duration) (time.Duration) {
+	if _value != nil {
+		return *_value
+	}
+	return _default
+}
+
+func flagStringsOrDefault (_value *[]string, _default []string) ([]string) {
+	if _value != nil {
+		return *_value
+	}
+	return _default
+}
+
+
+
+
+type FlagsBool bool
+func (_bool *FlagsBool) UnmarshalFlag (_value string) (error) {
+	switch _value {
+		case "true", "t", "yes", "y" :
+			*_bool = true
+			return nil
+		case "false", "f", "no", "n" :
+			*_bool = false
+			return nil
+		default :
+			return fmt.Errorf("[96e0db00]  invalid flag value:  `%s`!", _value)
+	}
+}
+
+func (_bool FlagsBool) MarshalFlag () (string) {
+	if _bool {
+		return "true"
+	} else {
+		return "false"
+	}
+}
 
