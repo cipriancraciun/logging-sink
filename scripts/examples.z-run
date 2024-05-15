@@ -17,24 +17,32 @@
 << examples / exec
 	exec -- "${ZRUN}" ':: run / exec' \
 			\
-			--input-syslog-json=true \
-			--input-http-json=true \
-			--input-http-xml=true \
-			--input-mqtt-json=true \
+			--input-syslog-parse-json true \
+			--input-http-parse-json true \
+			--input-mqtt-parse-json true \
 			\
-			--output-stdout=false \
-			--output-stdout-json-pretty=true \
+			--input-syslog-parse-xml true \
+			--input-http-parse-xml true \
+			--input-mqtt-parse-xml true \
 			\
-			--input-mqtt-keep-alive 30 \
-			--input-mqtt-clean-session=true \
-			--output-mqtt-keep-alive 30 \
-			--output-mqtt-clean-session=true \
+			--output-stdout-json-pretty true \
 			\
-			--parser-message-raw=false \
-			--report-timeout 6s \
+			--input-mqtt-keep-alive 30s \
+			--input-mqtt-clean-session true \
+			--output-mqtt-keep-alive 30s \
+			--output-mqtt-clean-session true \
+			\
+			--parser-message-raw false \
+			\
+			--report-interval 6s \
 			\
 			"${@}" \
 	#
+!!
+
+
+<< examples / help
+	exec -- "${ZRUN}" ':: examples / exec' --help "${@}"
 !!
 
 
@@ -46,9 +54,10 @@
 
 << examples / sink / from-syslog + to-stdout / rfc5424
 	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-syslog-enabled true \
 			--input-syslog-listen-udp "${_SYSLOG_INPUT_IP}:${_SYSLOG_INPUT_PORT}" \
-			--input-syslog-format rfc5424 \
-			--output-stdout=true \
+			--input-syslog-protocol rfc5424 \
+			--output-stdout-enabled true \
 			"${@}" \
 	#
 !!
@@ -56,9 +65,10 @@
 
 << examples / sink / from-syslog + to-stdout / rfc3164
 	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-syslog-enabled true \
 			--input-syslog-listen-udp "${_SYSLOG_INPUT_IP}:${_SYSLOG_INPUT_PORT}" \
-			--input-syslog-format rfc3164 \
-			--output-stdout=true \
+			--input-syslog-protocol rfc3164 \
+			--output-stdout-enabled true \
 			"${@}" \
 	#
 !!
@@ -72,8 +82,9 @@
 
 << examples / sink / from-http + to-stdout
 	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-http-enabled true \
 			--input-http-listen-tcp "${_HTTP_INPUT_IP}:${_HTTP_INPUT_PORT}" \
-			--output-stdout=true \
+			--output-stdout-enabled true \
 			"${@}" \
 	#
 !!
@@ -104,12 +115,13 @@
 			
 		'
 	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-syslog-enabled true \
 			--input-syslog-listen-udp "${_SYSLOG_INPUT_IP}:${_SYSLOG_INPUT_PORT}" \
-			--input-syslog-format rfc5424 \
+			--input-syslog-protocol rfc5424 \
 			--parser-external-command 'jq --unbuffered @{script}' \
 			--parser-external-script "${_jq_script}" \
-			--parser-external-replace=true \
-			--output-stdout=true \
+			--parser-external-replace true \
+			--output-stdout-enabled true \
 			"${@}" \
 	#
 !!
@@ -131,12 +143,13 @@
 			
 		'
 	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-syslog-enabled true \
 			--input-syslog-listen-udp "${_SYSLOG_INPUT_IP}:${_SYSLOG_INPUT_PORT}" \
-			--input-syslog-format rfc5424 \
+			--input-syslog-protocol rfc5424 \
 			--parser-external-command 'jq --unbuffered @{script}' \
 			--parser-external-script "${_jq_script}" \
-			--parser-external-replace=false \
-			--output-stdout=true \
+			--parser-external-replace false \
+			--output-stdout-enabled true \
 			"${@}" \
 	#
 !!
@@ -150,10 +163,11 @@
 
 << examples / sink / from-mqtt + to-stdout
 	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-mqtt-enabled true \
 			--input-mqtt-connect-tcp "${_MQTT_INPUT_IP}:${_MQTT_INPUT_PORT}" \
 			--input-mqtt-client "${_MQTT_INPUT_CLIENT}" \
 			--input-mqtt-topic "${_MQTT_INPUT_TOPIC}" \
-			--output-stdout=true \
+			--output-stdout-enabled true \
 			"${@}" \
 	#
 !!
@@ -161,11 +175,14 @@
 
 << examples / sink / from-syslog + to-mqtt / rfc5424
 	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-syslog-enabled true \
 			--input-syslog-listen-udp "${_SYSLOG_INPUT_IP}:${_SYSLOG_INPUT_PORT}" \
-			--input-syslog-format rfc5424 \
+			--input-syslog-protocol rfc5424 \
+			--output-mqtt-enabled true \
 			--output-mqtt-connect-tcp "${_MQTT_OUTPUT_IP}:${_MQTT_OUTPUT_PORT}" \
 			--output-mqtt-client "${_MQTT_OUTPUT_CLIENT}" \
 			--output-mqtt-topic "${_MQTT_OUTPUT_TOPIC}" \
+			--output-mqtt-topic-suffix "${_MQTT_OUTPUT_TOPIC_SUFFIX}" \
 			"${@}" \
 	#
 !!
@@ -173,24 +190,34 @@
 
 << examples / sink / from-syslog + to-mqtt / rfc3164
 	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-syslog-enabled true \
 			--input-syslog-listen-udp "${_SYSLOG_INPUT_IP}:${_SYSLOG_INPUT_PORT}" \
-			--input-syslog-format rfc3164 \
+			--input-syslog-protocol rfc3164 \
+			--output-mqtt-enabled true \
 			--output-mqtt-connect-tcp "${_MQTT_OUTPUT_IP}:${_MQTT_OUTPUT_PORT}" \
 			--output-mqtt-client "${_MQTT_OUTPUT_CLIENT}" \
 			--output-mqtt-topic "${_MQTT_OUTPUT_TOPIC}" \
+			--output-mqtt-topic-suffix "${_MQTT_OUTPUT_TOPIC_SUFFIX}" \
 			"${@}" \
 	#
 !!
 
 
 << examples / sink / from-mqtt + to-mqtt
+	if test -z "${_MQTT_INPUT_TOPIC_IGNORE:-}" ; then
+		_MQTT_INPUT_TOPIC_IGNORE='^'"${_MQTT_OUTPUT_TOPIC}"'(/?|$)'
+	fi
 	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-mqtt-enabled true \
 			--input-mqtt-connect-tcp "${_MQTT_INPUT_IP}:${_MQTT_INPUT_PORT}" \
 			--input-mqtt-client "${_MQTT_INPUT_CLIENT}" \
 			--input-mqtt-topic "${_MQTT_INPUT_TOPIC}" \
+			--input-mqtt-topic-ignore "${_MQTT_INPUT_TOPIC_IGNORE}" \
+			--output-mqtt-enabled true \
 			--output-mqtt-connect-tcp "${_MQTT_OUTPUT_IP}:${_MQTT_OUTPUT_PORT}" \
 			--output-mqtt-client "${_MQTT_OUTPUT_CLIENT}" \
 			--output-mqtt-topic "${_MQTT_OUTPUT_TOPIC}" \
+			--output-mqtt-topic-suffix "${_MQTT_OUTPUT_TOPIC_SUFFIX}" \
 			"${@}" \
 	#
 !!
@@ -204,13 +231,15 @@
 
 << examples / sink / from-syslog + to-file / rfc5424
 	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-syslog-enabled true \
 			--input-syslog-listen-udp "${_SYSLOG_INPUT_IP}:${_SYSLOG_INPUT_PORT}" \
-			--input-syslog-format rfc5424 \
+			--input-syslog-protocol rfc5424 \
+			--output-file-enabled true \
 			--output-file-current-symlink "${_FILE_OUTPUT_LOGS}/tail" \
 			--output-file-current-store "${_FILE_OUTPUT_LOGS}/current" \
 			--output-file-archived-store "${_FILE_OUTPUT_LOGS}/archived" \
 			--output-file-archived-compress "${_FILE_OUTPUT_COMPRESSION}" \
-			--output-file-json-pretty=false \
+			--output-file-json-pretty false \
 			--output-file-messages 100000 \
 			--output-file-timeout 120s \
 			"${@}" \
@@ -220,14 +249,16 @@
 
 << examples / sink / from-mqtt + to-file
 	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-mqtt-enabled true \
 			--input-mqtt-connect-tcp "${_MQTT_INPUT_IP}:${_MQTT_INPUT_PORT}" \
 			--input-mqtt-client "${_MQTT_INPUT_CLIENT}" \
 			--input-mqtt-topic "${_MQTT_INPUT_TOPIC}" \
+			--output-file-enabled true \
 			--output-file-current-symlink "${_FILE_OUTPUT_LOGS}/tail" \
 			--output-file-current-store "${_FILE_OUTPUT_LOGS}/current" \
 			--output-file-archived-store "${_FILE_OUTPUT_LOGS}/archived" \
 			--output-file-archived-compress "${_FILE_OUTPUT_COMPRESSION}" \
-			--output-file-json-pretty=false \
+			--output-file-json-pretty false \
 			--output-file-messages 100000 \
 			--output-file-timeout 3600s \
 			"${@}" \
@@ -429,7 +460,7 @@
 	test "${#}" -eq 0
 	exec -- mosquitto_sub \
 			-h "${_MQTT_INPUT_IP}" -p "${_MQTT_INPUT_PORT}" -V 5 \
-			-t "${_MQTT_INPUT_TOPIC}" -q 0 \
+			-t "${_MQTT_INPUT_TOPIC}/#" -q 0 \
 			-N -F '%t | id:%m size:%l qos:%q/%r | %p\n' \
 	#
 !!
@@ -439,7 +470,7 @@
 	test "${#}" -eq 0
 	exec -- mosquitto_sub \
 			-h "${_MQTT_OUTPUT_IP}" -p "${_MQTT_OUTPUT_PORT}" -V 5 \
-			-t "${_MQTT_OUTPUT_TOPIC}" -q 0 \
+			-t "${_MQTT_OUTPUT_TOPIC}/#" -q 0 \
 			-N -F '%t | id:%m size:%l qos:%q/%r | %p\n' \
 	#
 !!
