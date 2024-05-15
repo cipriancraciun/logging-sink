@@ -243,6 +243,7 @@ func configure (_arguments []string) (*Configuration, error) {
 				Identifier : flagStringOrDefault (_flags.OutputMqtt.Identifier, DefaultOutputMqttIdentifier),
 				ConnectTcp : flagStringOrDefault (_flags.OutputMqtt.ConnectTcp, DefaultOutputMqttConnectTcp),
 				Topic : flagStringOrDefault (_flags.OutputMqtt.Topic, DefaultOutputMqttTopic),
+				TopicSuffix : flagStringOrDefault (_flags.OutputMqtt.TopicSuffix, DefaultOutputMqttTopicSuffix),
 				Client : flagStringOrDefault (_flags.OutputMqtt.Client, DefaultOutputMqttClient),
 				Username : flagStringOrDefault (_flags.OutputMqtt.Username, DefaultOutputMqttUsername),
 				Password : flagStringOrDefault (_flags.OutputMqtt.Password, DefaultOutputMqttPassword),

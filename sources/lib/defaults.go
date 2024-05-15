@@ -79,6 +79,7 @@ const DefaultOutputMqttEnabled = false
 const DefaultOutputMqttIdentifier = ""
 const DefaultOutputMqttConnectTcp = ""
 const DefaultOutputMqttTopic = ""
+const DefaultOutputMqttTopicSuffix = ""
 const DefaultOutputMqttClient = ""
 const DefaultOutputMqttUsername = ""
 const DefaultOutputMqttPassword = ""

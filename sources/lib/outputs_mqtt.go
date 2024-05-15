@@ -8,6 +8,7 @@ import "encoding/json"
 import "fmt"
 import "log"
 import "os"
+import "strings"
 import "sync"
 import "syscall"
 import "time"
@@ -23,6 +24,7 @@ type OutputMqttFlags struct {
 	Identifier *string `long:"output-mqtt-identifier" value-name:"{identifier}"`
 	ConnectTcp *string `long:"output-mqtt-connect-tcp" value-name:"{ip}:{port}"`
 	Topic *string `long:"output-mqtt-topic" value-name:"{topic}"`
+	TopicSuffix *string `long:"output-mqtt-topic-suffix" value-name:"{pattern} (see manual)"`
 	Client *string `long:"output-mqtt-client" value-name:"{identifier}"`
 	Username *string `long:"output-mqtt-username" value-name:"..." default-mask:"..."`
 	Password *string `long:"output-mqtt-password" value-name:"..." default-mask:"..."`
@@ -40,6 +42,7 @@ type OutputMqttConfiguration struct {
 	Identifier string
 	ConnectTcp string
 	Topic string
+	TopicSuffix string
 	Client string
 	Username string
 	Password string
@@ -259,12 +262,89 @@ func outputMqttProcess (_context *OutputMqttContext, _message *Message) (error) 
 		return _error
 	}
 	
+	_topic := _configuration.Topic
+	_topicSuffix := _configuration.TopicSuffix
+	if _topicSuffix != "" {
+		//  TODO:  Document these!
+		_replacements := make ([]string, 0, 16)
+		_replacements = append (_replacements, "@{schema}", _message.Schema)
+		_replacements = append (_replacements, "@{collector_type}", _message.CollectorType)
+		_replacements = append (_replacements, "@{collector_identifier}", _message.CollectorIdentifier)
+		_collectorSchema := ""
+		if strings.Contains (_topicSuffix, "@{syslog_") {
+			if _metadata, _ok := _message.MessageMetaData.(*SyslogMessageMetaData); _ok {
+				_collectorSchema = _metadata.Schema
+				_replacements = append (_replacements, "@{syslog_schema}", _metadata.Schema)
+				_replacements = append (_replacements, "@{syslog_protocol}", _metadata.Protocol)
+				_replacements = append (_replacements, "@{syslog_node}", _metadata.Node)
+				_replacements = append (_replacements, "@{syslog_service}", _metadata.Service)
+				_replacements = append (_replacements, "@{syslog_type}", _metadata.Type)
+				_replacements = append (_replacements, "@{syslog_level}", _metadata.Level)
+				_replacements = append (_replacements, "@{syslog_level_unix}", fmt.Sprintf ("%d", _metadata.LevelUnix))
+			} else {
+				_replacements = append (_replacements, "@{syslog_schema}", "")
+				_replacements = append (_replacements, "@{syslog_protocol}", "")
+				_replacements = append (_replacements, "@{syslog_node}", "")
+				_replacements = append (_replacements, "@{syslog_service}", "")
+				_replacements = append (_replacements, "@{syslog_type}", "")
+				_replacements = append (_replacements, "@{syslog_level}", "")
+				_replacements = append (_replacements, "@{syslog_level_unix}", "")
+			}
+		}
+		if strings.Contains (_topicSuffix, "@{http_") {
+			if _metadata, _ok := _message.MessageMetaData.(*HttpMessageMetaData); _ok {
+				_collectorSchema = _metadata.Schema
+				_replacements = append (_replacements, "@{http_schema}", _metadata.Schema)
+				_replacements = append (_replacements, "@{http_protocol}", _metadata.Protocol)
+				_replacements = append (_replacements, "@{http_host}", _metadata.Host)
+				_replacements = append (_replacements, "@{http_method}", _metadata.Method)
+				_replacements = append (_replacements, "@{http_path}", _metadata.Path)
+				_replacements = append (_replacements, "@{http_remote_ip}", _metadata.RemoteIp)
+			} else {
+				_replacements = append (_replacements, "@{http_schema}", "")
+				_replacements = append (_replacements, "@{http_protocol}", "")
+				_replacements = append (_replacements, "@{http_host}", "")
+				_replacements = append (_replacements, "@{http_method}", "")
+				_replacements = append (_replacements, "@{http_path}", "")
+				_replacements = append (_replacements, "@{http_remote_ip}", "")
+			}
+		}
+		if strings.Contains (_topicSuffix, "@{mqtt_") {
+			if _metadata, _ok := _message.MessageMetaData.(*MqttMessageMetaData); _ok {
+				_collectorSchema = _metadata.Schema
+				_replacements = append (_replacements, "@{mqtt_schema}", _metadata.Schema)
+				_replacements = append (_replacements, "@{mqtt_topic}", _metadata.Topic)
+			} else {
+				_replacements = append (_replacements, "@{mqtt_schema}", "")
+				_replacements = append (_replacements, "@{mqtt_topic}", "")
+			}
+		}
+		if strings.Contains (_topicSuffix, "@{collector_schema}") {
+			if _collectorSchema == "" {
+				if _metadata, _ok := _message.MessageMetaData.(*SyslogMessageMetaData); _ok {
+					_collectorSchema = _metadata.Schema
+				} else if _metadata, _ok := _message.MessageMetaData.(*HttpMessageMetaData); _ok {
+					_collectorSchema = _metadata.Schema
+				} else if _metadata, _ok := _message.MessageMetaData.(*MqttMessageMetaData); _ok {
+					_collectorSchema = _metadata.Schema
+				}
+			}
+			_collectorSchema = _collectorSchema[len (_message.CollectorType) + 1 :]
+			_replacements = append (_replacements, "@{collector_schema}", _collectorSchema)
+		}
+		_replacer := strings.NewReplacer (_replacements ...)
+		_topicSuffix = _replacer.Replace (_topicSuffix)
+	}
+	if _topicSuffix != "" {
+		_topic += "/" + _topicSuffix
+	}
+	
 	if _configuration.Debug {
-		log.Printf ("[dd] [6f787eab]  output mqtt publishing message (%d bytes)...\n", len (_buffer))
+		log.Printf ("[dd] [6f787eab]  output mqtt publishing message on topic `%s` (%d bytes)...\n", _topic, len (_buffer))
 	}
 	
 	_cancelation := context.Background ()
-	if _error := _client.Publish (_cancelation.Done (), _buffer, _configuration.Topic); _error != nil {
+	if _error := _client.Publish (_cancelation.Done (), _buffer, _topic); _error != nil {
 		logError (_error, "[423309f9]  output mqtt failed to publish message;  ignoring!")
 		return _error
 	}
