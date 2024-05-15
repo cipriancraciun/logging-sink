@@ -271,9 +271,12 @@ func outputMqttProcess (_context *OutputMqttContext, _message *Message) (error) 
 		_replacements = append (_replacements, "@{collector_type}", _message.CollectorType)
 		_replacements = append (_replacements, "@{collector_identifier}", _message.CollectorIdentifier)
 		_collectorSchema := ""
+		_collectorDefault := ""
 		if strings.Contains (_topicSuffix, "@{syslog_") {
 			if _metadata, _ok := _message.MessageMetaData.(*SyslogMessageMetaData); _ok {
 				_collectorSchema = _metadata.Schema
+				_collectorDefault = fmt.Sprintf ("%s/%s/%s", _metadata.Node, _metadata.Service, _metadata.Level)
+				_replacements = append (_replacements, "@{syslog_default}", _collectorDefault)
 				_replacements = append (_replacements, "@{syslog_schema}", _metadata.Schema)
 				_replacements = append (_replacements, "@{syslog_protocol}", _metadata.Protocol)
 				_replacements = append (_replacements, "@{syslog_node}", _metadata.Node)
@@ -282,6 +285,7 @@ func outputMqttProcess (_context *OutputMqttContext, _message *Message) (error) 
 				_replacements = append (_replacements, "@{syslog_level}", _metadata.Level)
 				_replacements = append (_replacements, "@{syslog_level_unix}", fmt.Sprintf ("%d", _metadata.LevelUnix))
 			} else {
+				_replacements = append (_replacements, "@{syslog_default}", "")
 				_replacements = append (_replacements, "@{syslog_schema}", "")
 				_replacements = append (_replacements, "@{syslog_protocol}", "")
 				_replacements = append (_replacements, "@{syslog_node}", "")
@@ -294,6 +298,8 @@ func outputMqttProcess (_context *OutputMqttContext, _message *Message) (error) 
 		if strings.Contains (_topicSuffix, "@{http_") {
 			if _metadata, _ok := _message.MessageMetaData.(*HttpMessageMetaData); _ok {
 				_collectorSchema = _metadata.Schema
+				_collectorDefault = fmt.Sprintf ("%s/%s", _metadata.Host, _metadata.Method)
+				_replacements = append (_replacements, "@{http_default}", _collectorDefault)
 				_replacements = append (_replacements, "@{http_schema}", _metadata.Schema)
 				_replacements = append (_replacements, "@{http_protocol}", _metadata.Protocol)
 				_replacements = append (_replacements, "@{http_host}", _metadata.Host)
@@ -301,6 +307,7 @@ func outputMqttProcess (_context *OutputMqttContext, _message *Message) (error) 
 				_replacements = append (_replacements, "@{http_path}", _metadata.Path)
 				_replacements = append (_replacements, "@{http_remote_ip}", _metadata.RemoteIp)
 			} else {
+				_replacements = append (_replacements, "@{http_default}", "")
 				_replacements = append (_replacements, "@{http_schema}", "")
 				_replacements = append (_replacements, "@{http_protocol}", "")
 				_replacements = append (_replacements, "@{http_host}", "")
@@ -312,9 +319,12 @@ func outputMqttProcess (_context *OutputMqttContext, _message *Message) (error) 
 		if strings.Contains (_topicSuffix, "@{mqtt_") {
 			if _metadata, _ok := _message.MessageMetaData.(*MqttMessageMetaData); _ok {
 				_collectorSchema = _metadata.Schema
+				_collectorDefault = _metadata.Topic
+				_replacements = append (_replacements, "@{mqtt_default}", _collectorDefault)
 				_replacements = append (_replacements, "@{mqtt_schema}", _metadata.Schema)
 				_replacements = append (_replacements, "@{mqtt_topic}", _metadata.Topic)
 			} else {
+				_replacements = append (_replacements, "@{mqtt_default}", "")
 				_replacements = append (_replacements, "@{mqtt_schema}", "")
 				_replacements = append (_replacements, "@{mqtt_topic}", "")
 			}
@@ -331,6 +341,18 @@ func outputMqttProcess (_context *OutputMqttContext, _message *Message) (error) 
 			}
 			_collectorSchema = _collectorSchema[len (_message.CollectorType) + 1 :]
 			_replacements = append (_replacements, "@{collector_schema}", _collectorSchema)
+		}
+		if strings.Contains (_topicSuffix, "@{collector_default}") {
+			if _collectorDefault == "" {
+				if _metadata, _ok := _message.MessageMetaData.(*SyslogMessageMetaData); _ok {
+					_collectorDefault = fmt.Sprintf ("%s/%s/%s", _metadata.Node, _metadata.Service, _metadata.Level)
+				} else if _metadata, _ok := _message.MessageMetaData.(*HttpMessageMetaData); _ok {
+					_collectorDefault = fmt.Sprintf ("%s/%s", _metadata.Host, _metadata.Method)
+				} else if _metadata, _ok := _message.MessageMetaData.(*MqttMessageMetaData); _ok {
+					_collectorDefault = _metadata.Topic
+				}
+			}
+			_replacements = append (_replacements, "@{collector_default}", _collectorDefault)
 		}
 		_replacer := strings.NewReplacer (_replacements ...)
 		_topicSuffix = _replacer.Replace (_topicSuffix)
