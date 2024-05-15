@@ -67,7 +67,7 @@ type SyslogMessageMetaData struct {
 
 
 const SyslogCollectorType = "syslog"
-const SyslogMessageMetaDataSchema = "syslog:20181020a"
+const SyslogMessageMetaDataSchema = SyslogCollectorType + ":" + "20181020a"
 
 
 
@@ -104,7 +104,7 @@ type HttpMessageHeaderValue interface{}
 
 
 const HttpCollectorType = "http"
-const HttpMessageMetaDataSchema = "http:20181020a"
+const HttpMessageMetaDataSchema = HttpCollectorType + ":" + "20181020a"
 
 
 
@@ -117,6 +117,6 @@ type MqttMessageMetaData struct {
 
 
 const MqttCollectorType = "mqtt"
-const MqttMessageMetaDataSchema = "mqtt:20181020a"
+const MqttMessageMetaDataSchema = MqttCollectorType + ":" + "20181020a"
 
 
