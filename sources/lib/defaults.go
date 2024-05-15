@@ -77,7 +77,6 @@ const DefaultOutputFileDebug = false
 const DefaultOutputFileTickerInterval = 6 * time.Second  //  NOTE:  internal
 
 const DefaultOutputMqttEnabled = false
-const DefaultOutputMqttIdentifier = ""
 const DefaultOutputMqttConnectTcp = ""
 const DefaultOutputMqttTopic = ""
 const DefaultOutputMqttTopicSuffix = ""

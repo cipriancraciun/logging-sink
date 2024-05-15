@@ -251,7 +251,6 @@ func configure (_arguments []string) (*Configuration, error) {
 	var _outputMqttConfiguration *OutputMqttConfiguration = nil
 	if (_flags.OutputMqtt != nil) && flagBoolOrDefault (_flags.OutputMqtt.Enabled, DefaultOutputMqttEnabled) {
 		_outputMqttConfiguration = & OutputMqttConfiguration {
-				Identifier : flagStringOrDefault (_flags.OutputMqtt.Identifier, DefaultOutputMqttIdentifier),
 				ConnectTcp : flagStringOrDefault (_flags.OutputMqtt.ConnectTcp, DefaultOutputMqttConnectTcp),
 				Topic : flagStringOrDefault (_flags.OutputMqtt.Topic, DefaultOutputMqttTopic),
 				TopicSuffix : flagStringOrDefault (_flags.OutputMqtt.TopicSuffix, DefaultOutputMqttTopicSuffix),

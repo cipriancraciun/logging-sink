@@ -21,7 +21,6 @@ import mqtt "github.com/pascaldekloe/mqtt"
 type OutputMqttFlags struct {
 	
 	Enabled *FlagsBool `long:"output-mqtt-enabled" value-name:"{bool}"`
-	Identifier *string `long:"output-mqtt-identifier" value-name:"{identifier}"`
 	ConnectTcp *string `long:"output-mqtt-connect-tcp" value-name:"{ip}:{port}"`
 	Topic *string `long:"output-mqtt-topic" value-name:"{topic}"`
 	TopicSuffix *string `long:"output-mqtt-topic-suffix" value-name:"{pattern} (see manual)"`
@@ -39,7 +38,6 @@ type OutputMqttFlags struct {
 
 type OutputMqttConfiguration struct {
 	
-	Identifier string
 	ConnectTcp string
 	Topic string
 	TopicSuffix string
