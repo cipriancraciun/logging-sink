@@ -63,6 +63,8 @@ type SyslogMessageMetaData struct {
 	LevelUnix int8 `json:"level_unix,omitempty"`
 	
 	Fields map[string]interface{} `json:"fields"`
+	
+	ParserError string `json:"parser_error,omitempty"`
 }
 
 

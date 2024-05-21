@@ -240,14 +240,14 @@ func (_context *InputSyslogFormat) GetParser (_messageRaw []byte) (syslog_format
 			_protocol = _configuration.Protocol
 			_format = syslog.RFC3164
 			if ! rfc3164LineRegexp.Match (_messageRaw) {
-				_error = fmt.Errorf ("[992dc19d]  input syslog invalid message for protocol RFC3164:  `%s`!", _messageRaw)
+				_error = fmt.Errorf ("[992dc19d]  input syslog invalid message for protocol RFC3164!")
 			}
 		
 		case "rfc5424" :
 			_protocol = _configuration.Protocol
 			_format = syslog.RFC5424
 			if ! rfc5424LineRegexp.Match (_messageRaw) {
-				_error = fmt.Errorf ("[0e814e9b]  input syslog invalid message for protocol RFC5424:  `%s`!", _messageRaw)
+				_error = fmt.Errorf ("[0e814e9b]  input syslog invalid message for protocol RFC5424!")
 			}
 		
 		case "detect" :
@@ -258,16 +258,17 @@ func (_context *InputSyslogFormat) GetParser (_messageRaw []byte) (syslog_format
 				_protocol = "rfc3164"
 				_format = syslog.RFC3164
 			} else {
-				_error = fmt.Errorf ("[5bc2ba75]  input syslog invalid message for any supported protocols:  `%s`!", _messageRaw)
+				_error = fmt.Errorf ("[5bc2ba75]  input syslog invalid message for any supported protocols!")
 			}
 		
 		default :
 			_error = fmt.Errorf ("[a87e7a5f]  input syslog invalid protocol:  `%s`!", _configuration.Protocol)
 	}
 	
+	_messageSha256 := generateMessageSha256 (_messageRaw)
+	
 	if _error == nil {
 		_parser := _format.GetParser (_messageRaw)
-		_messageSha256 := generateMessageSha256 (_messageRaw)
 		return & InputSyslogParser {
 				parser : _parser,
 				messageRaw : _messageRaw,
@@ -277,6 +278,9 @@ func (_context *InputSyslogFormat) GetParser (_messageRaw []byte) (syslog_format
 	} else {
 		return & InputSyslogParser {
 				error : _error,
+				messageRaw : _messageRaw,
+				messageSha256 : _messageSha256,
+				messageProtocol : _protocol,
 			}
 	}
 }
@@ -301,9 +305,13 @@ type InputSyslogParser struct {
 
 func (_context *InputSyslogParser) Parse () (error) {
 	if _context.error != nil {
-		return _context.error
+		return nil
 	}
-	return _context.parser.Parse ()
+	if _error := _context.parser.Parse (); _error != nil {
+		logError (_error, "[a4417193]  input syslog failed to parse message;  ignoring!")
+		_context.error = _error
+	}
+	return nil
 }
 
 func (_context *InputSyslogParser) Location (_location *time.Location) () {
@@ -314,10 +322,13 @@ func (_context *InputSyslogParser) Location (_location *time.Location) () {
 }
 
 func (_context *InputSyslogParser) Dump () (syslog_format.LogParts) {
-	if _context.error != nil {
-		return nil
+	var _message syslog_format.LogParts = nil
+	if _context.parser != nil {
+		_message = _context.parser.Dump ()
 	}
-	_message := _context.parser.Dump ()
+	if _message == nil {
+		_message = make (map[string]interface{})
+	}
 	if _context.messageRaw != nil {
 		_message["_message_raw"] = _context.messageRaw
 	}
@@ -326,6 +337,9 @@ func (_context *InputSyslogParser) Dump () (syslog_format.LogParts) {
 	}
 	if _context.messageProtocol != "" {
 		_message["_message_protocol"] = _context.messageProtocol
+	}
+	if _context.error != nil {
+		_message["_message_error"] = _context.error.Error ()
 	}
 	return _message
 }
@@ -336,13 +350,13 @@ func (_context *InputSyslogParser) Dump () (syslog_format.LogParts) {
 type InputSyslogHandler InputSyslogContext
 
 func (_context_0 *InputSyslogHandler) Handle (_message syslog_format.LogParts, _ int64, _error error) () {
+	if _error != nil {
+		logError (_error, "[258484e5]  input syslog failed to handle message;  ignoring!")
+		return
+	}
 	_context := (*InputSyslogContext) (_context_0)
-	if _error == nil {
-		if _error := inputSyslogProcess (_context, _message); _error != nil {
-			logError (_error, "[eca965a0]  input syslog failed to process message;  ignoring!")
-		}
-	} else {
-		logError (_error, "[258484e5]  input syslog failed to parse message;  ignoring!")
+	if _error := inputSyslogProcess (_context, _message); _error != nil {
+		logError (_error, "[eca965a0]  input syslog failed to process message;  ignoring!")
 	}
 }
 
@@ -490,6 +504,18 @@ func inputSyslogProcess (_context *InputSyslogContext, _syslogMessage syslog_for
 		return _error
 	}
 	
+	var _messageError string
+	if _value, _error := syslogPartExtractAsString (_syslogMessage, []string {"_message_error"}, true, true); _error == nil {
+		if _value != "" {
+			_messageError = _value
+			_messageProtocol = ""
+			_levelUnix = 0
+			_levelText = ""
+		}
+	} else {
+		return _error
+	}
+	
 	_collectorMessage := & CollectorMessage {
 			CollectorType : SyslogCollectorType,
 			CollectorIdentifier : _configuration.Identifier,
@@ -509,6 +535,7 @@ func inputSyslogProcess (_context *InputSyslogContext, _syslogMessage syslog_for
 					Level : _levelText,
 					LevelUnix : _levelUnix,
 					Fields : _syslogMessage,
+					ParserError : _messageError,
 				},
 		}
 	
