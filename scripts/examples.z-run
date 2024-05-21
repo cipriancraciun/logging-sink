@@ -45,6 +45,10 @@
 	exec -- "${ZRUN}" ':: examples / exec' --help "${@}"
 !!
 
+<< examples / version
+	exec -- "${ZRUN}" ':: examples / exec' --version "${@}"
+!!
+
 
 
 
@@ -68,6 +72,17 @@
 			--input-syslog-enabled true \
 			--input-syslog-listen-udp "${_SYSLOG_INPUT_IP}:${_SYSLOG_INPUT_PORT}" \
 			--input-syslog-protocol rfc3164 \
+			--output-stdout-enabled true \
+			"${@}" \
+	#
+!!
+
+
+<< examples / sink / from-syslog + to-stdout / detect
+	exec -- "${ZRUN}" ':: examples / exec' \
+			--input-syslog-enabled true \
+			--input-syslog-listen-udp "${_SYSLOG_INPUT_IP}:${_SYSLOG_INPUT_PORT}" \
+			--input-syslog-protocol detect \
 			--output-stdout-enabled true \
 			"${@}" \
 	#

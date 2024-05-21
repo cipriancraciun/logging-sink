@@ -222,21 +222,24 @@
 	exec -- watchexec \
 			\
 			--watch="${_sources}" \
+			--project-origin="${_sources}" \
 			\
-			--filter="${_sources}/go.*" \
-			--filter="${_sources}/cmd/**" \
-			--filter="${_sources}/lib/**" \
-			--filter="${_sources}/extensions/**" \
-			--filter="${_sources}/embedded/*.go" \
-			--filter="${_sources}/embedded/documentation/**" \
+			--filter='/go.*' \
+			--filter='/cmd/**' \
+			--filter='/lib/**' \
+			--filter='/extensions/**' \
+			--filter='/embedded/*.go' \
+			--filter='/embedded/documentation/**' \
 			\
 			--restart \
 			\
 			--no-shell \
 			\
 			--no-default-ignore \
+			--no-discover-ignore \
+			--no-global-ignore \
+			--no-project-ignore \
 			--no-vcs-ignore \
-			--no-ignore \
 			\
 			-- \
 			\
