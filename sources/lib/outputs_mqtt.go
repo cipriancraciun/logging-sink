@@ -273,7 +273,7 @@ func outputMqttProcess (_context *OutputMqttContext, _message *Message) (error) 
 		if strings.Contains (_topicSuffix, "@{syslog_") {
 			if _metadata, _ok := _message.MessageMetaData.(*SyslogMessageMetaData); _ok {
 				_collectorSchema = _metadata.Schema
-				_collectorDefault = fmt.Sprintf ("%s/%s/%s", _metadata.Node, _metadata.Service, _metadata.Level)
+				_collectorDefault = fmt.Sprintf ("%s/%s/%s/%s", _metadata.Protocol, _metadata.Node, _metadata.Service, _metadata.Level)
 				_replacements = append (_replacements, "@{syslog_default}", _collectorDefault)
 				_replacements = append (_replacements, "@{syslog_schema}", _metadata.Schema)
 				_replacements = append (_replacements, "@{syslog_protocol}", _metadata.Protocol)
@@ -343,7 +343,7 @@ func outputMqttProcess (_context *OutputMqttContext, _message *Message) (error) 
 		if strings.Contains (_topicSuffix, "@{collector_default}") {
 			if _collectorDefault == "" {
 				if _metadata, _ok := _message.MessageMetaData.(*SyslogMessageMetaData); _ok {
-					_collectorDefault = fmt.Sprintf ("%s/%s/%s", _metadata.Node, _metadata.Service, _metadata.Level)
+					_collectorDefault = fmt.Sprintf ("%s/%s/%s/%s", _metadata.Protocol, _metadata.Node, _metadata.Service, _metadata.Level)
 				} else if _metadata, _ok := _message.MessageMetaData.(*HttpMessageMetaData); _ok {
 					_collectorDefault = fmt.Sprintf ("%s/%s", _metadata.Host, _metadata.Method)
 				} else if _metadata, _ok := _message.MessageMetaData.(*MqttMessageMetaData); _ok {
