@@ -8,6 +8,7 @@ import "encoding/json"
 import "fmt"
 import "log"
 import "os"
+import "regexp"
 import "sync"
 import "syscall"
 import "time"
@@ -26,7 +27,7 @@ type InputSyslogFlags struct {
 	ListenUdp *string `long:"input-syslog-listen-udp" value-name:"{ip}:{port}"`
 	ListenUnix *string `long:"input-syslog-listen-unix" value-name:"{path}"`
 	Timeout *time.Duration `long:"input-syslog-timeout" value-name:"{duration}"`
-	Protocol *string `long:"input-syslog-protocol" choice:"rfc3164" choice:"rfc5424"`
+	Protocol *string `long:"input-syslog-protocol" choice:"rfc3164" choice:"rfc5424" choice:"detect"`
 	ParseJson *FlagsBool `long:"input-syslog-parse-json" value-name:"{bool}"`
 	ParseXml *FlagsBool `long:"input-syslog-parse-xml" value-name:"{bool}"`
 	Debug *FlagsBool `long:"input-syslog-debug" value-name:"{bool}"`
@@ -41,7 +42,6 @@ type InputSyslogConfiguration struct {
 	ListenUnix string
 	Timeout time.Duration
 	Protocol string
-	Parser syslog_format.Format
 	ParseJson bool
 	ParseXml bool
 	Debug bool
@@ -71,7 +71,7 @@ func inputSyslogInitialize (_configuration *InputSyslogConfiguration, _messagesQ
 		log.Printf ("[ii] [fe61c4fc]  input syslog using protocol `%s`;\n", _configuration.Protocol)
 	}
 	_serverFormat := & InputSyslogFormat {
-			delegate : _configuration.Parser,
+			configuration : _configuration,
 		}
 	_server.SetFormat (_serverFormat)
 	
@@ -224,46 +224,108 @@ func inputSyslogLooper (_context *InputSyslogContext) (error) {
 
 
 type InputSyslogFormat struct {
-	delegate syslog_format.Format
+	configuration *InputSyslogConfiguration
 }
 
-func (format *InputSyslogFormat) GetParser (_messageRaw []byte) (syslog_format.LogParser) {
-	_messageSha256 := generateMessageSha256 (_messageRaw)
-	return & InputSyslogParser {
-			delegate : format.delegate.GetParser (_messageRaw),
-			messageRaw : _messageRaw,
-			messageSha256 : _messageSha256,
-		}
+func (_context *InputSyslogFormat) GetParser (_messageRaw []byte) (syslog_format.LogParser) {
+	
+	_configuration := _context.configuration
+	
+	var _protocol string = "unknown"
+	var _format syslog_format.Format = nil
+	var _error error = nil
+	switch _configuration.Protocol {
+		
+		case "rfc3164" :
+			_protocol = _configuration.Protocol
+			_format = syslog.RFC3164
+			if ! rfc3164LineRegexp.Match (_messageRaw) {
+				_error = fmt.Errorf ("[992dc19d]  input syslog invalid message for protocol RFC3164:  `%s`!", _messageRaw)
+			}
+		
+		case "rfc5424" :
+			_protocol = _configuration.Protocol
+			_format = syslog.RFC5424
+			if ! rfc5424LineRegexp.Match (_messageRaw) {
+				_error = fmt.Errorf ("[0e814e9b]  input syslog invalid message for protocol RFC5424:  `%s`!", _messageRaw)
+			}
+		
+		case "detect" :
+			if rfc5424LineRegexp.Match (_messageRaw) {
+				_protocol = "rfc5424"
+				_format = syslog.RFC5424
+			} else if rfc3164LineRegexp.Match (_messageRaw) {
+				_protocol = "rfc3164"
+				_format = syslog.RFC3164
+			} else {
+				_error = fmt.Errorf ("[5bc2ba75]  input syslog invalid message for any supported protocols:  `%s`!", _messageRaw)
+			}
+		
+		default :
+			_error = fmt.Errorf ("[a87e7a5f]  input syslog invalid protocol:  `%s`!", _configuration.Protocol)
+	}
+	
+	if _error == nil {
+		_parser := _format.GetParser (_messageRaw)
+		_messageSha256 := generateMessageSha256 (_messageRaw)
+		return & InputSyslogParser {
+				parser : _parser,
+				messageRaw : _messageRaw,
+				messageSha256 : _messageSha256,
+				messageProtocol : _protocol,
+			}
+	} else {
+		return & InputSyslogParser {
+				error : _error,
+			}
+	}
 }
 
-func (format *InputSyslogFormat) GetSplitFunc () (bufio.SplitFunc) {
-	return format.delegate.GetSplitFunc ()
+func (_context *InputSyslogFormat) GetSplitFunc () (bufio.SplitFunc) {
+	return bufio.ScanLines
 }
+
+var rfc3164LineRegexp = regexp.MustCompile ("(?i)^<[0-9]+>(?:(:?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) [ ]?[0-9]+ [0-9]+:[0-9]+:[0-9]+ )|(?:[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}))")
+var rfc5424LineRegexp = regexp.MustCompile ("(?i)^<[0-9]+>1 (?:[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})")
 
 
 
 
 type InputSyslogParser struct {
-	delegate syslog_format.LogParser
+	error error
+	parser syslog_format.LogParser
 	messageRaw []byte
 	messageSha256 string
+	messageProtocol string
 }
 
-func (parser *InputSyslogParser) Parse () (error) {
-	return parser.delegate.Parse ()
-}
-
-func (parser *InputSyslogParser) Location (_location *time.Location) () {
-	parser.delegate.Location (_location)
-}
-
-func (parser *InputSyslogParser) Dump () (syslog_format.LogParts) {
-	_message := parser.delegate.Dump ()
-	if parser.messageRaw != nil {
-		_message["_message_raw"] = parser.messageRaw
+func (_context *InputSyslogParser) Parse () (error) {
+	if _context.error != nil {
+		return _context.error
 	}
-	if parser.messageSha256 != "" {
-		_message["_message_sha256"] = parser.messageSha256
+	return _context.parser.Parse ()
+}
+
+func (_context *InputSyslogParser) Location (_location *time.Location) () {
+	if _context.error != nil {
+		return
+	}
+	_context.parser.Location (_location)
+}
+
+func (_context *InputSyslogParser) Dump () (syslog_format.LogParts) {
+	if _context.error != nil {
+		return nil
+	}
+	_message := _context.parser.Dump ()
+	if _context.messageRaw != nil {
+		_message["_message_raw"] = _context.messageRaw
+	}
+	if _context.messageSha256 != "" {
+		_message["_message_sha256"] = _context.messageSha256
+	}
+	if _context.messageProtocol != "" {
+		_message["_message_protocol"] = _context.messageProtocol
 	}
 	return _message
 }
@@ -305,8 +367,10 @@ func inputSyslogProcess (_context *InputSyslogContext, _syslogMessage syslog_for
 	}
 	
 	var _messageText string
-	if _value, _error := syslogPartExtractAsString (_syslogMessage, []string {"message", "content"}, true, false); _error == nil {
-		_messageText = _value
+	if _value, _error := syslogPartExtractAsString (_syslogMessage, []string {"message", "content"}, true, true); _error == nil {
+		if _value != "" {
+			_messageText = _value
+		}
 	} else {
 		return _error
 	}
@@ -324,36 +388,47 @@ func inputSyslogProcess (_context *InputSyslogContext, _syslogMessage syslog_for
 	}
 	
 	var _timestamp time.Time
-	if _value, _error := syslogPartExtractAsTime (_syslogMessage, []string {"timestamp"}, true, false); _error == nil {
-		_timestamp = _value
+	if _value, _error := syslogPartExtractAsTime (_syslogMessage, []string {"timestamp"}, true, true); _error == nil {
+		var _valueZero time.Time
+		if _value != _valueZero {
+			_timestamp = _value
+		}
 	} else {
 		return _error
 	}
 	
 	var _node string
-	if _value, _error := syslogPartExtractAsString (_syslogMessage, []string {"hostname"}, true, false); _error == nil {
-		_node = _value
+	if _value, _error := syslogPartExtractAsString (_syslogMessage, []string {"hostname"}, true, true); _error == nil {
+		if _value != "" {
+			_node = _value
+		}
 	} else {
 		return _error
 	}
 	
 	var _service string
-	if _value, _error := syslogPartExtractAsString (_syslogMessage, []string {"app_name", "tag"}, true, false); _error == nil {
-		_service = _value
+	if _value, _error := syslogPartExtractAsString (_syslogMessage, []string {"app_name", "tag"}, true, true); _error == nil {
+		if _value != "" {
+			_service = _value
+		}
 	} else {
 		return _error
 	}
 	
 	var _type string
 	if _value, _error := syslogPartExtractAsString (_syslogMessage, []string {"msg_id"}, true, true); _error == nil {
-		_type = _value
+		if _value != "" {
+			_type = _value
+		}
 	} else {
 		return _error
 	}
 	
 	var _severity int
-	if _value, _error := syslogPartExtractAsInt (_syslogMessage, []string {"severity"}, false, false); _error == nil {
-		_severity = _value
+	if _value, _error := syslogPartExtractAsInt (_syslogMessage, []string {"severity"}, false, true); _error == nil {
+		if _value != 0 {
+			_severity = _value
+		}
 	}
 	var _levelUnix int8
 	var _levelText string
@@ -390,14 +465,27 @@ func inputSyslogProcess (_context *InputSyslogContext, _syslogMessage syslog_for
 	
 	var _messageRaw []byte
 	if _value, _error := syslogPartExtractAsBytes (_syslogMessage, []string {"_message_raw"}, true, false); _error == nil {
-		_messageRaw = _value
+		if _value != nil {
+			_messageRaw = _value
+		}
 	} else {
 		return _error
 	}
 	
 	var _messageSha256 string
 	if _value, _error := syslogPartExtractAsString (_syslogMessage, []string {"_message_sha256"}, true, false); _error == nil {
-		_messageSha256 = _value
+		if _value != "" {
+			_messageSha256 = _value
+		}
+	} else {
+		return _error
+	}
+	
+	var _messageProtocol string
+	if _value, _error := syslogPartExtractAsString (_syslogMessage, []string {"_message_protocol"}, true, false); _error == nil {
+		if _value != "" {
+			_messageProtocol = _value
+		}
 	} else {
 		return _error
 	}
@@ -412,7 +500,7 @@ func inputSyslogProcess (_context *InputSyslogContext, _syslogMessage syslog_for
 			MessageJson : _messageJson,
 			MessageMetaData : & SyslogMessageMetaData {
 					Schema : SyslogMessageMetaDataSchema,
-					Protocol : _configuration.Protocol,
+					Protocol : _messageProtocol,
 					Timestamp : _timestamp,
 					TimestampUnix : uint64 (_timestamp.UnixNano () / 1000000),
 					Node : _node,
@@ -469,9 +557,11 @@ func syslogPartExtractAsBytes (_message syslog_format.LogParts, _keys []string, 
 		if _value != nil {
 			if _value, _isValid := _value.([]byte); _isValid {
 				return _value, nil
-			} else {
-				return nil, fmt.Errorf ("[9f0ac23f]  syslog message has invalid part with key `%q`:  `%#v`", _keys, _value)
 			}
+			if _value, _isValid := _value.(string); _isValid {
+				return []byte (_value), nil
+			}
+			return nil, fmt.Errorf ("[9f0ac23f]  syslog message has invalid part with key `%q`:  `%#v`", _keys, _value)
 		} else {
 			return nil, nil
 		}

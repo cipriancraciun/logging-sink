@@ -12,9 +12,6 @@ import "time"
 
 import "github.com/jessevdk/go-flags"
 
-import syslog "gopkg.in/mcuadros/go-syslog.v2"
-import syslog_format "gopkg.in/mcuadros/go-syslog.v2/format"
-
 
 
 
@@ -57,24 +54,13 @@ func configure (_arguments []string) (*Configuration, error) {
 	
 	var _inputSyslogConfiguration *InputSyslogConfiguration = nil
 	if (_flags.InputSyslog != nil) && flagBoolOrDefault (_flags.InputSyslog.Enabled, DefaultInputSyslogEnabled) {
-		_inputSyslogProtocol := flagStringOrDefault (_flags.InputSyslog.Protocol, DefaultInputSyslogProtocol)
-		var _inputSyslogParser syslog_format.Format = nil
-		switch _inputSyslogProtocol {
-			case "rfc3164" :
-				_inputSyslogParser = syslog.RFC3164
-			case "rfc5424" :
-				_inputSyslogParser = syslog.RFC5424
-			default :
-				return nil, fmt.Errorf ("[a87e7a5f]  invalid `input-syslog-protocol` value:  `%s`!", _inputSyslogProtocol)
-		}
 		_inputSyslogConfiguration = & InputSyslogConfiguration {
 				Identifier : flagStringOrDefault (_flags.InputSyslog.Identifier, DefaultInputSyslogIdentifier),
 				ListenTcp : flagStringOrDefault (_flags.InputSyslog.ListenTcp, DefaultInputSyslogListenTcp),
 				ListenUdp : flagStringOrDefault (_flags.InputSyslog.ListenUdp, DefaultInputSyslogListenUdp),
 				ListenUnix : flagStringOrDefault (_flags.InputSyslog.ListenUnix, DefaultInputSyslogListenUnix),
 				Timeout : flagDurationOrDefault (_flags.InputSyslog.Timeout, DefaultInputSyslogTimeout),
-				Protocol : _inputSyslogProtocol,
-				Parser : _inputSyslogParser,
+				Protocol : flagStringOrDefault (_flags.InputSyslog.Protocol, DefaultInputSyslogProtocol),
 				ParseJson : flagBoolOrDefault (_flags.InputSyslog.ParseJson, DefaultInputSyslogParseJson),
 				ParseXml : flagBoolOrDefault (_flags.InputSyslog.ParseXml, DefaultInputSyslogParseXml),
 				Debug : flagBoolOrDefault (_flags.InputSyslog.Debug, DefaultInputSyslogDebug || _forcedDebug),
