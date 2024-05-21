@@ -3,6 +3,7 @@
 package lib
 
 
+import "bytes"
 import "encoding/json"
 import "fmt"
 import "os"
@@ -11,6 +12,8 @@ import "strings"
 import "time"
 
 import "github.com/jessevdk/go-flags"
+
+import . "github.com/volution/logging-sink/embedded"
 
 
 
@@ -39,6 +42,22 @@ func configure (_arguments []string) (*Configuration, error) {
 		
 		if _flagsMeta.Help {
 			_parser.WriteHelp (os.Stderr)
+			os.Exit (0)
+		}
+		if _flagsMeta.Version {
+			_buffer := bytes.NewBuffer (nil)
+			fmt.Fprintf (_buffer, "* version       : %s\n", BUILD_VERSION)
+			fmt.Fprintf (_buffer, "* build target  : %s, %s-%s, %s, %s\n", BUILD_TARGET, BUILD_TARGET_OS, BUILD_TARGET_ARCH, BUILD_COMPILER_VERSION, BUILD_COMPILER_TYPE)
+			fmt.Fprintf (_buffer, "* build number  : %s, %s\n", BUILD_NUMBER, BUILD_TIMESTAMP)
+			fmt.Fprintf (_buffer, "* code & issues : %s\n", PROJECT_URL)
+			fmt.Fprintf (_buffer, "* sources git   : %s\n", BUILD_GIT_HASH)
+			fmt.Fprintf (_buffer, "* sources hash  : %s\n", BUILD_SOURCES_HASH)
+			fmt.Fprintf (_buffer, "* uname node    : %s\n", UNAME_NODE)
+			fmt.Fprintf (_buffer, "* uname system  : %s, %s, %s\n", UNAME_SYSTEM, UNAME_RELEASE, UNAME_MACHINE)
+			fmt.Fprintf (_buffer, "* uname hash    : %s\n", UNAME_FINGERPRINT)
+			if _, _error := _buffer.WriteTo (os.Stdout); _error != nil {
+				return nil, _error
+			}
 			os.Exit (0)
 		}
 		if _flagsMeta.DumpFlags {

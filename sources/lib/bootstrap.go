@@ -39,6 +39,7 @@ type GlobalFlags struct {
 type MetaFlags struct {
 	
 	Help bool `short:"h" long:"help" no-ini:"-"`
+	Version bool `short:"v" long:"version" no-ini:"-"`
 	DumpFlags bool `long:"dump-flags" no-ini:"-"`
 	DumpConfiguration bool `long:"dump-configuration" no-ini:"-"`
 }
