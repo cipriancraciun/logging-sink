@@ -229,6 +229,8 @@ type InputSyslogFormat struct {
 
 func (_context *InputSyslogFormat) GetParser (_messageRaw []byte) (syslog_format.LogParser) {
 	
+	_messageRaw = append ([]byte (nil), _messageRaw ...)
+	
 	_configuration := _context.configuration
 	
 	var _protocol string = "unknown"
