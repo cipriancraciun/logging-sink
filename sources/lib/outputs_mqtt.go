@@ -273,12 +273,16 @@ func outputMqttProcess (_context *OutputMqttContext, _message *Message) (error) 
 		if strings.Contains (_topicSuffix, "@{syslog_") {
 			if _metadata, _ok := _message.MessageMetaData.(*SyslogMessageMetaData); _ok {
 				_collectorSchema = _metadata.Schema
-				_collectorDefault = fmt.Sprintf ("%s/%s/%s/%s", _metadata.Protocol, _metadata.Node, _metadata.Service, _metadata.Level)
+				_node := strings.ReplaceAll (_metadata.Node, "--", "/")
+				_service := strings.ReplaceAll (_metadata.Service, "--", "/")
+				_collectorDefault = fmt.Sprintf ("%s/%s/%s/%s", _metadata.Protocol, _node, _service, _metadata.Level)
 				_replacements = append (_replacements, "@{syslog_default}", _collectorDefault)
 				_replacements = append (_replacements, "@{syslog_schema}", _metadata.Schema)
 				_replacements = append (_replacements, "@{syslog_protocol}", _metadata.Protocol)
-				_replacements = append (_replacements, "@{syslog_node}", _metadata.Node)
-				_replacements = append (_replacements, "@{syslog_service}", _metadata.Service)
+				_replacements = append (_replacements, "@{syslog_node_0}", _metadata.Node)
+				_replacements = append (_replacements, "@{syslog_service_0}", _metadata.Service)
+				_replacements = append (_replacements, "@{syslog_node}", _node)
+				_replacements = append (_replacements, "@{syslog_service}", _service)
 				_replacements = append (_replacements, "@{syslog_type}", _metadata.Type)
 				_replacements = append (_replacements, "@{syslog_level}", _metadata.Level)
 				_replacements = append (_replacements, "@{syslog_level_unix}", fmt.Sprintf ("%d", _metadata.LevelUnix))
@@ -286,6 +290,8 @@ func outputMqttProcess (_context *OutputMqttContext, _message *Message) (error) 
 				_replacements = append (_replacements, "@{syslog_default}", "")
 				_replacements = append (_replacements, "@{syslog_schema}", "")
 				_replacements = append (_replacements, "@{syslog_protocol}", "")
+				_replacements = append (_replacements, "@{syslog_node_0}", "")
+				_replacements = append (_replacements, "@{syslog_service_0}", "")
 				_replacements = append (_replacements, "@{syslog_node}", "")
 				_replacements = append (_replacements, "@{syslog_service}", "")
 				_replacements = append (_replacements, "@{syslog_type}", "")
@@ -343,7 +349,9 @@ func outputMqttProcess (_context *OutputMqttContext, _message *Message) (error) 
 		if strings.Contains (_topicSuffix, "@{collector_default}") {
 			if _collectorDefault == "" {
 				if _metadata, _ok := _message.MessageMetaData.(*SyslogMessageMetaData); _ok {
-					_collectorDefault = fmt.Sprintf ("%s/%s/%s/%s", _metadata.Protocol, _metadata.Node, _metadata.Service, _metadata.Level)
+					_node := strings.ReplaceAll (_metadata.Node, "--", "/")
+					_service := strings.ReplaceAll (_metadata.Service, "--", "/")
+					_collectorDefault = fmt.Sprintf ("%s/%s/%s/%s", _metadata.Protocol, _node, _service, _metadata.Level)
 				} else if _metadata, _ok := _message.MessageMetaData.(*HttpMessageMetaData); _ok {
 					_collectorDefault = fmt.Sprintf ("%s/%s", _metadata.Host, _metadata.Method)
 				} else if _metadata, _ok := _message.MessageMetaData.(*MqttMessageMetaData); _ok {
