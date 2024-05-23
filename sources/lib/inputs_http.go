@@ -285,7 +285,7 @@ func inputHttpProcess (_context *InputHttpContext, _request *http.Request) (erro
 	
 	if _messageParseable {
 		switch _messageContentType {
-			case "text/plain", "application/json", "application/xml" :
+			case "text/plain", "text/json", "application/json", "text/xml", "application/xml" :
 				if _text, _valid := parseMessageText (_messageRaw); _valid {
 					_messageText = _text
 				} else {
@@ -299,7 +299,7 @@ func inputHttpProcess (_context *InputHttpContext, _request *http.Request) (erro
 	
 	if _messageParseable {
 		switch _messageContentType {
-			case "application/json", "application/xml" :
+			case "text/json", "application/json", "text/xml", "application/xml" :
 				_messageText = strings.TrimSpace (_messageText)
 				if _messageText == "" {
 					log.Printf ("[ww] [f49a6c18]  input failed accepting body:  empty (if ignoring whitespaces);  ignoring and aborting parsing!")
@@ -314,7 +314,7 @@ func inputHttpProcess (_context *InputHttpContext, _request *http.Request) (erro
 			case "text/plain" :
 				{} // NOP
 			
-			case "application/json" :
+			case "text/json", "application/json" :
 				if _configuration.ParseJson {
 					if _json, _error := parseMessageJson (_messageText); _error == nil {
 						_messageJson = _json
@@ -324,7 +324,7 @@ func inputHttpProcess (_context *InputHttpContext, _request *http.Request) (erro
 					}
 				}
 			
-			case "application/xml" :
+			case "text/xml", "application/xml" :
 				if _configuration.ParseXml {
 					if _json, _error := parseMessageXml (_messageText); _error == nil {
 						_messageJson = _json
