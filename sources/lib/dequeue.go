@@ -42,6 +42,7 @@ type DequeueContext struct {
 	
 	sequence uint64
 	dropped uint64
+	overflown uint64
 	
 	inboundQueue <-chan *CollectorMessage
 	outboundQueues [] chan<- *Message
@@ -178,9 +179,9 @@ func dequeueLooper (_context *DequeueContext) (error) {
 			_deltaSequence := _context.sequence - _lastReportSequence
 			_deltaSpeed := float64 (_deltaSequence) / _deltaTimestamp
 			if _deltaSequence > 0 {
-				log.Printf ("[ii] [5cf68979]  processed %d K messages (currently %d at %.2f m/s, in total %d, dropped %d);\n", _context.sequence / 1000, _deltaSequence, _deltaSpeed, _context.sequence, _context.dropped)
+				log.Printf ("[ii] [5cf68979]  processed %d K messages (currently %d at %.2f m/s, in total %d, dropped %d, overflown %d);\n", _context.sequence / 1000, _deltaSequence, _deltaSpeed, _context.sequence, _context.dropped, _context.overflown)
 			} else {
-				log.Printf ("[ii] [9eea1474]  processed %d K messages (in total %d, dropped %d);\n", _context.sequence / 1000, _context.sequence, _context.dropped)
+				log.Printf ("[ii] [9eea1474]  processed %d K messages (in total %d, dropped %d, overflown %d);\n", _context.sequence / 1000, _context.sequence, _context.dropped, _context.overflown)
 			}
 			_lastReportTimestamp = _timestamp
 			_lastReportSequence = _context.sequence
@@ -229,6 +230,11 @@ func dequeueProcess (_context *DequeueContext, _collectorMessage *CollectorMessa
 		for _, _outboundQueue := range _context.outboundQueues {
 			select {
 				case _outboundQueue <- _message :
+				default :
+					_context.overflown += 1
+					if _configuration.Debug {
+						log.Printf ("[ww] [24c5974b]  dequeue overflown pushing the message #%d;\n", _context.sequence)
+					}
 			}
 		}
 	} else {
