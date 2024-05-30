@@ -48,7 +48,7 @@ const DefaultOutputStdoutEnabled = false
 const DefaultOutputStdoutBufferSize = 16 * 1024
 const DefaultOutputStdoutJsonPretty = true
 const DefaultOutputStdoutJsonSequence = false
-const DefaultOutputStdoutFlush = false
+const DefaultOutputStdoutFlush = true
 const DefaultOutputStdoutQueueSize = 16 * 1024
 const DefaultOutputStdoutDebug = false
 
@@ -69,7 +69,7 @@ const DefaultOutputFileRotateCounter = 16 * 1024
 const DefaultOutputFileBufferSize = 16 * 1024
 const DefaultOutputFileJsonPretty = false
 const DefaultOutputFileJsonSequence = true
-const DefaultOutputFileFlush = true
+const DefaultOutputFileFlush = false
 const DefaultOutputFileFolderMode = 0750
 const DefaultOutputFileFileMode = 0640
 const DefaultOutputFileQueueSize = 16 * 1024
